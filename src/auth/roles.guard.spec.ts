@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RolesGuard } from './roles.guard';
 import { Reflector } from '@nestjs/core';
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { prisma } from '../prisma';
 
@@ -93,5 +93,20 @@ describe('RolesGuard', () => {
 
     const promise = guard.canActivate(mockContext);
     await expect(promise).rejects.toThrow(ForbiddenException);
+  });
+
+  it('should throw UnauthorizedException if user context is missing', async () => {
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
+
+    const mockContext = {
+      switchToHttp: () => ({
+        getRequest: () => ({ user: null }),
+      }),
+      getHandler: () => ({}),
+      getClass: () => ({}),
+    } as unknown as ExecutionContext;
+
+    const promise = guard.canActivate(mockContext);
+    await expect(promise).rejects.toThrow(UnauthorizedException);
   });
 });
