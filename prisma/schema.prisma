@@ -7,7 +7,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
@@ -36,6 +35,13 @@ enum TransactionType {
 enum GradingStatus {
   PENDING
   COMPLETED
+}
+
+enum SectionType {
+  LISTENING
+  READING
+  WRITING
+  SPEAKING
 }
 
 model User {
@@ -69,11 +75,32 @@ model MockTest {
   title       String
   description String?
   difficulty  TestDifficulty @default(ACADEMIC)
-  content     Json     // Stores sections, questions, and keys in flexible JSONB
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  sections    TestSection[]
   attempts    UserAttempt[]
+}
+
+model TestSection {
+  id          String   @id @default(uuid())
+  testId      String
+  test        MockTest @relation(fields: [testId], references: [id])
+  type        SectionType
+  order       Int
+  createdAt   DateTime @default(now())
+
+  questions   Question[]
+}
+
+model Question {
+  id          String   @id @default(uuid())
+  sectionId   String
+  section     TestSection @relation(fields: [sectionId], references: [id])
+  order       Int
+  content     Json     // Flexible JSON for actual question text/options
+  answerKey   Json?    // Correct answers
+  createdAt   DateTime @default(now())
 }
 
 model UserAttempt {
@@ -83,7 +110,7 @@ model UserAttempt {
   testId           String
   test             MockTest      @relation(fields: [testId], references: [id])
   status           AttemptStatus @default(IN_PROGRESS)
-  answers          Json?         // Student's answer payload
+  answers          Json?         // Student's answer payload mapping to Question IDs
   aiGrades         Json?         // Instant grades from Gemini
   score            Float?        // Final overall band score
   masterAudioUrl   String?       // GCS link for human review
