@@ -1,0 +1,112 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  COMPLETED
+  EVALUATED
+}
+
+enum TransactionType {
+  TOPUP
+  SPEND
+  EARN
+}
+
+enum GradingStatus {
+  PENDING
+  COMPLETED
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firebaseUid   String    @unique
+  email         String    @unique
+  role          UserRole  @default(STUDENT)
+  creditBalance Float     @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  attempts      UserAttempt[]
+  transactions  Transaction[]
+  teacherProfile TeacherProfile?
+}
+
+model TeacherProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  bio         String?
+  creditRate  Float    @default(5) // Credits per grading
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  gradingRequests GradingRequest[]
+}
+
+model MockTest {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  difficulty  String?  // e.g., "General", "Academic"
+  content     Json     // Stores sections, questions, and keys in flexible JSONB
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  attempts    UserAttempt[]
+}
+
+model UserAttempt {
+  id               String        @id @default(uuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id])
+  testId           String
+  test             MockTest      @relation(fields: [testId], references: [id])
+  status           AttemptStatus @default(IN_PROGRESS)
+  answers          Json?         // Student's answer payload
+  aiGrades         Json?         // Instant grades from Gemini
+  score            Float?        // Final overall band score
+  masterAudioUrl   String?       // GCS link for human review
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  gradingRequests GradingRequest[]
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id])
+  amount      Float
+  type        TransactionType
+  description String?
+  createdAt   DateTime        @default(now())
+}
+
+model GradingRequest {
+  id          String        @id @default(uuid())
+  attemptId   String
+  attempt     UserAttempt   @relation(fields: [attemptId], references: [id])
+  teacherId   String
+  teacher     TeacherProfile @relation(fields: [teacherId], references: [id])
+  status      GradingStatus @default(PENDING)
+  feedback    String?       // Rich text or plain feedback
+  finalScore  Float?        // Human-revised band score
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
