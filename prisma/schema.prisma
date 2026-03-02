@@ -22,6 +22,11 @@ enum AttemptStatus {
   EVALUATED
 }
 
+enum TestDifficulty {
+  ACADEMIC
+  GENERAL
+}
+
 enum TransactionType {
   TOPUP
   SPEND
@@ -63,7 +68,7 @@ model MockTest {
   id          String   @id @default(uuid())
   title       String
   description String?
-  difficulty  String?  // e.g., "General", "Academic"
+  difficulty  TestDifficulty @default(ACADEMIC)
   content     Json     // Stores sections, questions, and keys in flexible JSONB
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
