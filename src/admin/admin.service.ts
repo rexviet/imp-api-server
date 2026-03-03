@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { prisma } from '../prisma';
+import { PrismaService } from '../prisma/prisma.service';
 import { TestDifficulty, SectionType } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
+  constructor(private readonly prisma: PrismaService) {}
   async seedMockTest(data: {
     title: string;
     description?: string;
@@ -18,7 +19,7 @@ export class AdminService {
       }[];
     }[];
   }) {
-    return prisma.mockTest.create({
+    return this.prisma.client.mockTest.create({
       data: {
         title: data.title,
         description: data.description,
@@ -48,7 +49,7 @@ export class AdminService {
   }
 
   async getAllMockTests() {
-    return prisma.mockTest.findMany({
+    return this.prisma.client.mockTest.findMany({
       include: {
         sections: true,
       },

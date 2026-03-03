@@ -3,19 +3,17 @@ import { RolesGuard } from './roles.guard';
 import { Reflector } from '@nestjs/core';
 import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { prisma } from '../prisma';
-
-jest.mock('../prisma', () => ({
-  prisma: {
-    user: {
-      findUnique: jest.fn(),
-    },
-  },
-}));
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('RolesGuard', () => {
   let guard: RolesGuard;
   let reflector: Reflector;
+
+  const mockPrismaClient = {
+    user: {
+      findUnique: jest.fn(),
+    },
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -26,6 +24,10 @@ describe('RolesGuard', () => {
           useValue: {
             getAllAndOverride: jest.fn(),
           },
+        },
+        {
+          provide: PrismaService,
+          useValue: { client: mockPrismaClient },
         },
       ],
     }).compile();
@@ -49,7 +51,7 @@ describe('RolesGuard', () => {
 
   it('should block if user role does not match', async () => {
     (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: UserRole.STUDENT });
+    mockPrismaClient.user.findUnique.mockResolvedValue({ role: UserRole.STUDENT });
 
     const mockContext = {
       switchToHttp: () => ({
@@ -65,7 +67,7 @@ describe('RolesGuard', () => {
 
   it('should allow access if user role matches', async () => {
     (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue({ role: UserRole.ADMIN });
+    mockPrismaClient.user.findUnique.mockResolvedValue({ role: UserRole.ADMIN });
 
     const mockContext = {
       switchToHttp: () => ({
@@ -81,7 +83,7 @@ describe('RolesGuard', () => {
 
   it('should block if user fails to exist in db', async () => {
     (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
-    (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+    mockPrismaClient.user.findUnique.mockResolvedValue(null);
 
     const mockContext = {
       switchToHttp: () => ({

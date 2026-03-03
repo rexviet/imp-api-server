@@ -1,27 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminService } from './admin.service';
-import { prisma } from '../prisma';
+import { PrismaService } from '../prisma/prisma.service';
 import { TestDifficulty, SectionType } from '@prisma/client';
-
-jest.mock('../prisma', () => ({
-  prisma: {
-    mockTest: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-    },
-  },
-}));
 
 describe('AdminService', () => {
   let service: AdminService;
 
+  const mockPrismaClient = {
+    mockTest: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
+  };
+
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AdminService],
+      providers: [
+        AdminService,
+        { provide: PrismaService, useValue: { client: mockPrismaClient } },
+      ],
     }).compile();
 
     service = module.get<AdminService>(AdminService);
-    jest.clearAllMocks();
   });
 
   it('should be defined', () => {
@@ -44,11 +45,11 @@ describe('AdminService', () => {
         ]
       };
 
-      (prisma.mockTest.create as jest.Mock).mockResolvedValue({ id: 'test-id', ...mockData });
+      mockPrismaClient.mockTest.create.mockResolvedValue({ id: 'test-id', ...mockData });
 
       const result = await service.seedMockTest(mockData);
 
-      expect(prisma.mockTest.create).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockPrismaClient.mockTest.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           title: 'Mock Test',
           sections: {
@@ -71,11 +72,11 @@ describe('AdminService', () => {
 
   describe('getAllMockTests', () => {
     it('should return all mock tests with sections', async () => {
-      (prisma.mockTest.findMany as jest.Mock).mockResolvedValue([{ title: 'Test 1' }]);
+      mockPrismaClient.mockTest.findMany.mockResolvedValue([{ title: 'Test 1' }]);
 
       const result = await service.getAllMockTests();
 
-      expect(prisma.mockTest.findMany).toHaveBeenCalled();
+      expect(mockPrismaClient.mockTest.findMany).toHaveBeenCalled();
       expect(result).toHaveLength(1);
     });
   });
