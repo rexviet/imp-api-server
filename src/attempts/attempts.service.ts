@@ -8,10 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AttemptStatus, TransactionType } from '@prisma/client';
 import { calculateBandScore, roundToIELTS } from './grading.utils';
 
-const EXAM_CREDIT_COST = 10; // Credits required to start a mock test
-
 @Injectable()
 export class AttemptsService {
+  private readonly EXAM_CREDIT_COST = 10; // Credits required to start a mock test
+
   constructor(private readonly prisma: PrismaService) {}
 
   private async resolveUser(firebaseUid: string) {
@@ -42,22 +42,22 @@ export class AttemptsService {
       if (!user) throw new NotFoundException('User not found');
 
       // 3. Strict balance check INSIDE transaction
-      if (user.creditBalance < EXAM_CREDIT_COST) {
+      if (user.creditBalance < this.EXAM_CREDIT_COST) {
         throw new BadRequestException(
-          `Insufficient credits. You need ${EXAM_CREDIT_COST} credits but have ${user.creditBalance}.`,
+          `Insufficient credits. You need ${this.EXAM_CREDIT_COST} credits but have ${user.creditBalance}.`,
         );
       }
 
       // 4. Deduct & Create ledger
       await tx.user.update({
         where: { id: user.id },
-        data: { creditBalance: { decrement: EXAM_CREDIT_COST } },
+        data: { creditBalance: { decrement: this.EXAM_CREDIT_COST } },
       });
 
       await tx.transaction.create({
         data: {
           userId: user.id,
-          amount: -EXAM_CREDIT_COST,
+          amount: -this.EXAM_CREDIT_COST,
           type: TransactionType.SPEND,
           description: `Mock Test: ${test.title}`,
         },
