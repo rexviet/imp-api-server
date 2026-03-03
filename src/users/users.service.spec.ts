@@ -61,10 +61,10 @@ describe('UsersService', () => {
     const mockUser = { id: '3', firebaseUid: 'uid3', email: 'test3@test.com', role: UserRole.TEACHER };
     mockPrismaClient.user.create.mockResolvedValue(mockUser);
     
-    const result = await service.findOrCreateUser('uid3', 'test3@test.com', UserRole.TEACHER);
+    const result = await service.findOrCreateUser('uid3', 'test3@test.com', undefined, UserRole.TEACHER);
     expect(result).toEqual(mockUser);
     expect(mockPrismaClient.user.create).toHaveBeenCalledWith({
-      data: { firebaseUid: 'uid3', email: 'test3@test.com', role: UserRole.TEACHER },
+      data: { firebaseUid: 'uid3', email: 'test3@test.com', name: undefined, role: UserRole.TEACHER },
     });
     expect(mockPrismaClient.teacherProfile.create).toHaveBeenCalledWith({
       data: { userId: '3' },

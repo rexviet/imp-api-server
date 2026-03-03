@@ -6,7 +6,7 @@ import { UserRole } from '@prisma/client';
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findOrCreateUser(firebaseUid: string, email: string, role?: UserRole) {
+  async findOrCreateUser(firebaseUid: string, email: string, name?: string, role?: UserRole) {
     let user = await this.prisma.client.user.findUnique({
       where: { firebaseUid },
     });
@@ -16,6 +16,7 @@ export class UsersService {
         data: {
           firebaseUid,
           email,
+          name,
           role: role ?? UserRole.STUDENT,
         },
       });

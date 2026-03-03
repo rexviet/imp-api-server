@@ -43,7 +43,7 @@ describe('UsersController', () => {
 
     const result = await controller.register(mockToken, mockDto);
     expect(result).toEqual(expectedResult);
-    expect(service.findOrCreateUser).toHaveBeenCalledWith('uid1', 'test@test.com', UserRole.STUDENT);
+    expect(service.findOrCreateUser).toHaveBeenCalledWith('uid1', 'test@test.com', undefined, UserRole.STUDENT);
   });
 
   it('should get current user info', async () => {
