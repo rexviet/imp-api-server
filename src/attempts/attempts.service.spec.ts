@@ -36,6 +36,12 @@ describe('AttemptsService', () => {
     service = module.get<AttemptsService>(AttemptsService);
   });
 
+  describe('Initialization', () => {
+    it('should have EXAM_CREDIT_COST set to 10', () => {
+      expect((service as any).EXAM_CREDIT_COST).toBe(10);
+    });
+  });
+
   describe('create', () => {
     it('should throw NotFoundException if test not found', async () => {
       mockPrismaClient.mockTest.findUnique.mockResolvedValue(null);
