@@ -28,8 +28,22 @@ describe('MockTestsService', () => {
   describe('findAll', () => {
     it('should return a list of mock tests with section count', async () => {
       const mockTests = [
-        { id: '1', title: 'Test 1', description: null, difficulty: 'ACADEMIC', createdAt: new Date(), _count: { sections: 4 } },
-        { id: '2', title: 'Test 2', description: 'Desc', difficulty: 'GENERAL', createdAt: new Date(), _count: { sections: 2 } },
+        {
+          id: '1',
+          title: 'Test 1',
+          description: null,
+          difficulty: 'ACADEMIC',
+          createdAt: new Date(),
+          _count: { sections: 4 },
+        },
+        {
+          id: '2',
+          title: 'Test 2',
+          description: 'Desc',
+          difficulty: 'GENERAL',
+          createdAt: new Date(),
+          _count: { sections: 2 },
+        },
       ];
       mockPrismaClient.mockTest.findMany.mockResolvedValue(mockTests);
 
@@ -84,7 +98,9 @@ describe('MockTestsService', () => {
     it('should throw NotFoundException if test does not exist', async () => {
       mockPrismaClient.mockTest.findUnique.mockResolvedValue(null);
 
-      await expect(service.findById('nonexistent')).rejects.toThrow(NotFoundException);
+      await expect(service.findById('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

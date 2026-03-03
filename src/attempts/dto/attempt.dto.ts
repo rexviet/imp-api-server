@@ -8,5 +8,5 @@ export class CreateAttemptDto {
 export class UpdateAttemptDto {
   @IsOptional()
   @IsObject()
-  answers?: Record<string, any>;
+  answers?: Record<string, unknown>;
 }

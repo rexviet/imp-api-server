@@ -1,14 +1,18 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AttemptsService } from './attempts.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { AttemptStatus, TransactionType } from '@prisma/client';
 
 describe('AttemptsService', () => {
   let service: AttemptsService;
 
   const mockTx = {
-    user: { update: jest.fn() },
+    user: { findUnique: jest.fn(), update: jest.fn() },
     transaction: { create: jest.fn() },
     userAttempt: { create: jest.fn() },
   };
@@ -36,28 +40,54 @@ describe('AttemptsService', () => {
     it('should throw NotFoundException if test not found', async () => {
       mockPrismaClient.mockTest.findUnique.mockResolvedValue(null);
 
-      await expect(service.create('uid1', 'bad-test')).rejects.toThrow(NotFoundException);
+      await expect(service.create('uid1', 'bad-test')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw NotFoundException if user not found', async () => {
-      mockPrismaClient.mockTest.findUnique.mockResolvedValue({ id: 't1', title: 'Test' });
-      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+      mockPrismaClient.mockTest.findUnique.mockResolvedValue({
+        id: 't1',
+        title: 'Test',
+      });
+      mockTx.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.create('uid1', 't1')).rejects.toThrow(NotFoundException);
+      await expect(service.create('uid1', 't1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw BadRequestException if insufficient credits', async () => {
-      mockPrismaClient.mockTest.findUnique.mockResolvedValue({ id: 't1', title: 'Test' });
-      mockPrismaClient.user.findUnique.mockResolvedValue({ id: 'u1', creditBalance: 5 });
+      mockPrismaClient.mockTest.findUnique.mockResolvedValue({
+        id: 't1',
+        title: 'Test',
+      });
+      mockTx.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        creditBalance: 5,
+      });
 
-      await expect(service.create('uid1', 't1')).rejects.toThrow(BadRequestException);
+      await expect(service.create('uid1', 't1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should create attempt with atomic credit deduction', async () => {
-      mockPrismaClient.mockTest.findUnique.mockResolvedValue({ id: 't1', title: 'Test' });
-      mockPrismaClient.user.findUnique.mockResolvedValue({ id: 'u1', creditBalance: 100 });
+      mockPrismaClient.mockTest.findUnique.mockResolvedValue({
+        id: 't1',
+        title: 'Test',
+      });
+      mockTx.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        creditBalance: 100,
+      });
 
-      const mockAttempt = { id: 'a1', userId: 'u1', testId: 't1', status: AttemptStatus.IN_PROGRESS };
+      const mockAttempt = {
+        id: 'a1',
+        userId: 'u1',
+        testId: 't1',
+        status: AttemptStatus.IN_PROGRESS,
+      };
       mockTx.userAttempt.create.mockResolvedValue(mockAttempt);
 
       const result = await service.create('uid1', 't1');
@@ -83,19 +113,28 @@ describe('AttemptsService', () => {
   describe('findById', () => {
     it('should throw NotFoundException if user not found', async () => {
       mockPrismaClient.user.findUnique.mockResolvedValue(null);
-      await expect(service.findById('uid1', 'a1')).rejects.toThrow(NotFoundException);
+      await expect(service.findById('uid1', 'a1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw NotFoundException if attempt not found', async () => {
       mockPrismaClient.user.findUnique.mockResolvedValue({ id: 'u1' });
       mockPrismaClient.userAttempt.findUnique.mockResolvedValue(null);
-      await expect(service.findById('uid1', 'a1')).rejects.toThrow(NotFoundException);
+      await expect(service.findById('uid1', 'a1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ForbiddenException if attempt belongs to another user', async () => {
       mockPrismaClient.user.findUnique.mockResolvedValue({ id: 'u1' });
-      mockPrismaClient.userAttempt.findUnique.mockResolvedValue({ id: 'a1', userId: 'u2' });
-      await expect(service.findById('uid1', 'a1')).rejects.toThrow(ForbiddenException);
+      mockPrismaClient.userAttempt.findUnique.mockResolvedValue({
+        id: 'a1',
+        userId: 'u2',
+      });
+      await expect(service.findById('uid1', 'a1')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('should return attempt with test data', async () => {
@@ -117,7 +156,9 @@ describe('AttemptsService', () => {
         status: AttemptStatus.COMPLETED,
       });
 
-      await expect(service.updateAnswers('uid1', 'a1', {})).rejects.toThrow(BadRequestException);
+      await expect(service.updateAnswers('uid1', 'a1', {})).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should update answers for in-progress attempt', async () => {
@@ -142,12 +183,60 @@ describe('AttemptsService', () => {
         id: 'a1',
         userId: 'u1',
         status: AttemptStatus.IN_PROGRESS,
+        test: { sections: [] },
       });
       const submitted = { id: 'a1', status: AttemptStatus.COMPLETED };
       mockPrismaClient.userAttempt.update.mockResolvedValue(submitted);
 
       const result = await service.submit('uid1', 'a1');
       expect(result.status).toBe(AttemptStatus.COMPLETED);
+    });
+
+    it('should calculate band scores and store in aiGrades on submission', async () => {
+      mockPrismaClient.user.findUnique.mockResolvedValue({ id: 'u1' });
+      
+      const mockAttemptWithTest = {
+        id: 'a1',
+        userId: 'u1',
+        status: AttemptStatus.IN_PROGRESS,
+        answers: { 'q1': 'A', 'q2': 'listening answer' },
+        test: {
+          sections: [
+            {
+              id: 's1',
+              type: 'READING',
+              questions: [
+                { id: 'q1', answerKey: { value: 'A' } }
+              ]
+            },
+            {
+              id: 's2',
+              type: 'LISTENING',
+              questions: [
+                { id: 'q2', answerKey: { values: ['listening answer', 'alternative'] } }
+              ]
+            }
+          ]
+        }
+      };
+      
+      mockPrismaClient.userAttempt.findUnique.mockResolvedValue(mockAttemptWithTest);
+      mockPrismaClient.userAttempt.update.mockResolvedValue({ id: 'a1', status: AttemptStatus.COMPLETED });
+
+      await service.submit('uid1', 'a1');
+
+      expect(mockPrismaClient.userAttempt.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: AttemptStatus.COMPLETED,
+            score: expect.any(Number),
+            aiGrades: expect.objectContaining({
+              's1': expect.objectContaining({ rawScore: 1, bandScore: expect.any(Number) }),
+              's2': expect.objectContaining({ rawScore: 1, bandScore: expect.any(Number) })
+            })
+          })
+        })
+      );
     });
 
     it('should throw if attempt already submitted', async () => {
@@ -158,7 +247,9 @@ describe('AttemptsService', () => {
         status: AttemptStatus.COMPLETED,
       });
 
-      await expect(service.submit('uid1', 'a1')).rejects.toThrow(BadRequestException);
+      await expect(service.submit('uid1', 'a1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

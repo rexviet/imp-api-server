@@ -22,9 +22,7 @@ describe('UsersController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
-      providers: [
-        { provide: UsersService, useValue: mockUsersService },
-      ],
+      providers: [{ provide: UsersService, useValue: mockUsersService }],
     })
       .overrideGuard(FirebaseAuthGuard)
       .useValue(mockFirebaseAuthGuard)
@@ -43,12 +41,21 @@ describe('UsersController', () => {
 
     const result = await controller.register(mockToken, mockDto);
     expect(result).toEqual(expectedResult);
-    expect(service.findOrCreateUser).toHaveBeenCalledWith('uid1', 'test@test.com', undefined, UserRole.STUDENT);
+    expect(service.findOrCreateUser).toHaveBeenCalledWith(
+      'uid1',
+      'test@test.com',
+      undefined,
+      UserRole.STUDENT,
+    );
   });
 
   it('should get current user info', async () => {
     const mockToken = { uid: 'uid2' };
-    const expectedResult = { id: '2', firebaseUid: 'uid2', email: 'foo@bar.com' };
+    const expectedResult = {
+      id: '2',
+      firebaseUid: 'uid2',
+      email: 'foo@bar.com',
+    };
 
     mockUsersService.getCurrentUser.mockResolvedValue(expectedResult);
 

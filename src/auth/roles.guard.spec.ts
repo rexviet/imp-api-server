@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { RolesGuard } from './roles.guard';
 import { Reflector } from '@nestjs/core';
-import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -50,8 +54,12 @@ describe('RolesGuard', () => {
   });
 
   it('should block if user role does not match', async () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
-    mockPrismaClient.user.findUnique.mockResolvedValue({ role: UserRole.STUDENT });
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([
+      UserRole.ADMIN,
+    ]);
+    mockPrismaClient.user.findUnique.mockResolvedValue({
+      role: UserRole.STUDENT,
+    });
 
     const mockContext = {
       switchToHttp: () => ({
@@ -66,8 +74,12 @@ describe('RolesGuard', () => {
   });
 
   it('should allow access if user role matches', async () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
-    mockPrismaClient.user.findUnique.mockResolvedValue({ role: UserRole.ADMIN });
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([
+      UserRole.ADMIN,
+    ]);
+    mockPrismaClient.user.findUnique.mockResolvedValue({
+      role: UserRole.ADMIN,
+    });
 
     const mockContext = {
       switchToHttp: () => ({
@@ -82,7 +94,9 @@ describe('RolesGuard', () => {
   });
 
   it('should block if user fails to exist in db', async () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([
+      UserRole.ADMIN,
+    ]);
     mockPrismaClient.user.findUnique.mockResolvedValue(null);
 
     const mockContext = {
@@ -98,7 +112,9 @@ describe('RolesGuard', () => {
   });
 
   it('should throw UnauthorizedException if user context is missing', async () => {
-    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([UserRole.ADMIN]);
+    (reflector.getAllAndOverride as jest.Mock).mockReturnValue([
+      UserRole.ADMIN,
+    ]);
 
     const mockContext = {
       switchToHttp: () => ({

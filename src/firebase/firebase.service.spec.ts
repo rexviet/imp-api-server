@@ -52,8 +52,8 @@ describe('FirebaseService', () => {
 
   describe('onModuleInit', () => {
     it('should initialize firebase-admin SDK if not already initialized', () => {
-      // @ts-ignore
-      admin.apps = []; 
+      // @ts-expect-error - testing initialization
+      admin.apps = [];
       service.onModuleInit();
       expect(admin.initializeApp).toHaveBeenCalled();
     });
@@ -83,7 +83,9 @@ describe('FirebaseService', () => {
     });
 
     it('should return null on invalid JWT', async () => {
-      const verifyIdTokenSpy = jest.fn().mockRejectedValue(new Error('Invalid token'));
+      const verifyIdTokenSpy = jest
+        .fn()
+        .mockRejectedValue(new Error('Invalid token'));
       (admin.auth as jest.Mock).mockReturnValue({
         verifyIdToken: verifyIdTokenSpy,
       });

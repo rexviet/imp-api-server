@@ -39,7 +39,9 @@ describe('AppController (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api/v1');
-    app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ transform: true, whitelist: true }),
+    );
     await app.init();
   });
 
@@ -56,7 +58,11 @@ describe('AppController (e2e)', () => {
 
   it('/api/v1/users/register (POST) - sync user', async () => {
     mockPrismaClient.user.findUnique.mockResolvedValue(null);
-    const mockUser = { id: 'user1', firebaseUid: 'test_uid_123', email: 'e2e@test.com' };
+    const mockUser = {
+      id: 'user1',
+      firebaseUid: 'test_uid_123',
+      email: 'e2e@test.com',
+    };
     mockPrismaClient.user.create.mockResolvedValue(mockUser);
 
     const res = await request(app.getHttpServer())

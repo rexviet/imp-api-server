@@ -54,7 +54,9 @@ describe('AttemptsController', () => {
     mockService.updateAnswers.mockResolvedValue({ id: 'a1' });
 
     await controller.updateAnswers(token, 'a1', dto);
-    expect(service.updateAnswers).toHaveBeenCalledWith('uid1', 'a1', { q1: 'A' });
+    expect(service.updateAnswers).toHaveBeenCalledWith('uid1', 'a1', {
+      q1: 'A',
+    });
   });
 
   it('should submit attempt', async () => {

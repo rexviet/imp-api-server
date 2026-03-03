@@ -10,10 +10,7 @@ export class CreditsController {
   constructor(private readonly creditsService: CreditsService) {}
 
   @Post('topup')
-  async topUp(
-    @CurrentUser() decodedToken: any,
-    @Body() dto: TopUpDto,
-  ) {
+  async topUp(@CurrentUser() decodedToken: any, @Body() dto: TopUpDto) {
     return this.creditsService.topUpCredits(decodedToken.uid, dto.amount);
   }
 
