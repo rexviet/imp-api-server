@@ -9,6 +9,7 @@ import { CreditsModule } from './credits/credits.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { AttemptsModule } from './attempts/attempts.module';
+import { SpeakingModule } from './speaking/speaking.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AttemptsModule } from './attempts/attempts.module';
     PrismaModule,
     MockTestsModule,
     AttemptsModule,
+    SpeakingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
