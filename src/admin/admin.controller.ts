@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Get, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
+import { SeedMockTestDto } from './dto/seed-mock-test.dto';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -12,8 +13,8 @@ export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Post('seed')
-  async seed(@Body() data: any) {
-    return this.adminService.seedMockTest(data);
+  async seed(@Body() dto: SeedMockTestDto) {
+    return this.adminService.seedMockTest(dto);
   }
 
   @Get('mock-tests')
@@ -21,3 +22,4 @@ export class AdminController {
     return this.adminService.getAllMockTests();
   }
 }
+

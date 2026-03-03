@@ -2,11 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 import { FirebaseService } from '../firebase/firebase.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { Reflector } from '@nestjs/core';
-
-jest.mock('../prisma', () => ({
-  prisma: {},
-}));
 
 describe('AdminController', () => {
   let controller: AdminController;
@@ -25,7 +22,11 @@ describe('AdminController', () => {
         },
         {
           provide: FirebaseService,
-          useValue: {}, // Mocked out since we are just checking guards metadata
+          useValue: {},
+        },
+        {
+          provide: PrismaService,
+          useValue: { client: {} },
         },
         Reflector,
       ],
@@ -42,8 +43,8 @@ describe('AdminController', () => {
 
   describe('seed', () => {
     it('should call adminService.seedMockTest', async () => {
-      const data = { title: 'Test' };
-      await controller.seed(data);
+      const data = { title: 'Test', difficulty: 'ACADEMIC', sections: [] };
+      await controller.seed(data as any);
       expect(service.seedMockTest).toHaveBeenCalledWith(data);
     });
   });
