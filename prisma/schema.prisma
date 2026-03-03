@@ -7,6 +7,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 enum UserRole {
@@ -48,6 +49,7 @@ model User {
   id            String    @id @default(uuid())
   firebaseUid   String    @unique
   email         String    @unique
+  name          String?
   role          UserRole  @default(STUDENT)
   creditBalance Float     @default(0)
   createdAt     DateTime  @default(now())
