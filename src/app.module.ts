@@ -25,4 +25,3 @@ import { AttemptsModule } from './attempts/attempts.module';
   providers: [AppService],
 })
 export class AppModule {}
-

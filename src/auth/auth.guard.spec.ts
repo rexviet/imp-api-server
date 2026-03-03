@@ -62,7 +62,10 @@ describe('FirebaseAuthGuard', () => {
 
     it('should return true and attach user to request on valid token', async () => {
       const mockUser = { uid: '123', email: 'test@example.com' };
-      const request = { headers: { authorization: 'Bearer valid-token' }, user: null };
+      const request = {
+        headers: { authorization: 'Bearer valid-token' },
+        user: null,
+      };
       const context = {
         switchToHttp: () => ({
           getRequest: () => request,

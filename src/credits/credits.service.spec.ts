@@ -42,13 +42,23 @@ describe('CreditsService', () => {
   describe('topUpCredits', () => {
     it('should throw NotFoundException if user not found', async () => {
       mockPrismaClient.user.findUnique.mockResolvedValue(null);
-      await expect(service.topUpCredits('uid1', 100)).rejects.toThrow(NotFoundException);
+      await expect(service.topUpCredits('uid1', 100)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should correctly run a transaction to update user credits and create transaction history', async () => {
-      const mockUser = { id: 'my_user_id', firebaseUid: 'uid1', creditBalance: 100 };
+      const mockUser = {
+        id: 'my_user_id',
+        firebaseUid: 'uid1',
+        creditBalance: 100,
+      };
       const updatedUser = { ...mockUser, creditBalance: 200 };
-      const createdTx = { id: 'tx_id', amount: 100, type: TransactionType.TOPUP };
+      const createdTx = {
+        id: 'tx_id',
+        amount: 100,
+        type: TransactionType.TOPUP,
+      };
 
       mockPrismaClient.user.findUnique.mockResolvedValue(mockUser);
       mockTx.user.update.mockResolvedValue(updatedUser);
@@ -76,7 +86,9 @@ describe('CreditsService', () => {
   describe('getTransactions', () => {
     it('should throw NotFoundException if user not found', async () => {
       mockPrismaClient.user.findUnique.mockResolvedValue(null);
-      await expect(service.getTransactions('uid2')).rejects.toThrow(NotFoundException);
+      await expect(service.getTransactions('uid2')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should return 50 latest transactions', async () => {

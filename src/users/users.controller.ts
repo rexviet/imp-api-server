@@ -17,7 +17,12 @@ export class UsersController {
     const firebaseUid = decodedToken.uid;
     const email = decodedToken.email;
     const name = dto.name || decodedToken.name;
-    return this.usersService.findOrCreateUser(firebaseUid, email, name, dto.role);
+    return this.usersService.findOrCreateUser(
+      firebaseUid,
+      email,
+      name,
+      dto.role,
+    );
   }
 
   @Get('me')

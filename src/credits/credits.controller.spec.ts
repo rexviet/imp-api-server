@@ -21,9 +21,7 @@ describe('CreditsController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CreditsController],
-      providers: [
-        { provide: CreditsService, useValue: mockCreditsService },
-      ],
+      providers: [{ provide: CreditsService, useValue: mockCreditsService }],
     })
       .overrideGuard(FirebaseAuthGuard)
       .useValue(mockFirebaseAuthGuard)
