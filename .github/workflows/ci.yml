@@ -27,5 +27,8 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run Tests
+      - name: Run Unit Tests
         run: npm test
+
+      - name: Run E2E Tests
+        run: npm run test:e2e
