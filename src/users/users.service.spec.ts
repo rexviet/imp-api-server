@@ -1,24 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UsersService } from './users.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { USERS_DATASOURCE, IUsersDatasource } from './users.datasource';
 import { UserRole } from '@prisma/client';
 
 describe('UsersService', () => {
   let service: UsersService;
-  let prismaService: PrismaService;
+  let datasource: IUsersDatasource;
 
-  const mockPrismaClient = {
-    user: {
-      findUnique: jest.fn(),
-      create: jest.fn(),
-    },
-    teacherProfile: {
-      create: jest.fn(),
-    },
-  };
-
-  const mockPrismaService = {
-    client: mockPrismaClient,
+  const mockDatasource: IUsersDatasource = {
+    findByFirebaseUid: jest.fn(),
+    findByFirebaseUidWithProfile: jest.fn(),
+    create: jest.fn(),
+    createTeacherProfile: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -26,12 +19,12 @@ describe('UsersService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
-        { provide: PrismaService, useValue: mockPrismaService },
+        { provide: USERS_DATASOURCE, useValue: mockDatasource },
       ],
     }).compile();
 
     service = module.get<UsersService>(UsersService);
-    prismaService = module.get<PrismaService>(PrismaService);
+    datasource = module.get(USERS_DATASOURCE);
   });
 
   it('should return existing user', async () => {
@@ -41,44 +34,43 @@ describe('UsersService', () => {
       email: 'test@test.com',
       role: UserRole.STUDENT,
     };
-    mockPrismaClient.user.findUnique.mockResolvedValue(mockUser);
+    (mockDatasource.findByFirebaseUid as jest.Mock).mockResolvedValue(mockUser);
 
     const result = await service.findOrCreateUser('uid1', 'test@test.com');
     expect(result).toEqual(mockUser);
-    expect(mockPrismaClient.user.create).not.toHaveBeenCalled();
+    expect(mockDatasource.create).not.toHaveBeenCalled();
   });
 
   it('should create new student user', async () => {
-    mockPrismaClient.user.findUnique.mockResolvedValue(null);
+    (mockDatasource.findByFirebaseUid as jest.Mock).mockResolvedValue(null);
     const mockUser = {
       id: '2',
       firebaseUid: 'uid2',
       email: 'test2@test.com',
       role: UserRole.STUDENT,
     };
-    mockPrismaClient.user.create.mockResolvedValue(mockUser);
+    (mockDatasource.create as jest.Mock).mockResolvedValue(mockUser);
 
     const result = await service.findOrCreateUser('uid2', 'test2@test.com');
     expect(result).toEqual(mockUser);
-    expect(mockPrismaClient.user.create).toHaveBeenCalledWith({
-      data: {
-        firebaseUid: 'uid2',
-        email: 'test2@test.com',
-        role: UserRole.STUDENT,
-      },
+    expect(mockDatasource.create).toHaveBeenCalledWith({
+      firebaseUid: 'uid2',
+      email: 'test2@test.com',
+      name: undefined,
+      role: UserRole.STUDENT,
     });
-    expect(mockPrismaClient.teacherProfile.create).not.toHaveBeenCalled();
+    expect(mockDatasource.createTeacherProfile).not.toHaveBeenCalled();
   });
 
   it('should create new teacher user and teacher profile', async () => {
-    mockPrismaClient.user.findUnique.mockResolvedValue(null);
+    (mockDatasource.findByFirebaseUid as jest.Mock).mockResolvedValue(null);
     const mockUser = {
       id: '3',
       firebaseUid: 'uid3',
       email: 'test3@test.com',
       role: UserRole.TEACHER,
     };
-    mockPrismaClient.user.create.mockResolvedValue(mockUser);
+    (mockDatasource.create as jest.Mock).mockResolvedValue(mockUser);
 
     const result = await service.findOrCreateUser(
       'uid3',
@@ -87,17 +79,13 @@ describe('UsersService', () => {
       UserRole.TEACHER,
     );
     expect(result).toEqual(mockUser);
-    expect(mockPrismaClient.user.create).toHaveBeenCalledWith({
-      data: {
-        firebaseUid: 'uid3',
-        email: 'test3@test.com',
-        name: undefined,
-        role: UserRole.TEACHER,
-      },
+    expect(mockDatasource.create).toHaveBeenCalledWith({
+      firebaseUid: 'uid3',
+      email: 'test3@test.com',
+      name: undefined,
+      role: UserRole.TEACHER,
     });
-    expect(mockPrismaClient.teacherProfile.create).toHaveBeenCalledWith({
-      data: { userId: '3' },
-    });
+    expect(mockDatasource.createTeacherProfile).toHaveBeenCalledWith('3');
   });
 
   it('should return current user with profile', async () => {
@@ -107,13 +95,10 @@ describe('UsersService', () => {
       email: 'test@test.com',
       teacherProfile: null,
     };
-    mockPrismaClient.user.findUnique.mockResolvedValue(mockUser);
+    (mockDatasource.findByFirebaseUidWithProfile as jest.Mock).mockResolvedValue(mockUser);
 
     const result = await service.getCurrentUser('uid1');
     expect(result).toEqual(mockUser);
-    expect(mockPrismaClient.user.findUnique).toHaveBeenCalledWith({
-      where: { firebaseUid: 'uid1' },
-      include: { teacherProfile: true },
-    });
+    expect(mockDatasource.findByFirebaseUidWithProfile).toHaveBeenCalledWith('uid1');
   });
 });

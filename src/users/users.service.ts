@@ -1,10 +1,13 @@
-import { Injectable, ConflictException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { IUsersDatasource, USERS_DATASOURCE } from './users.datasource';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(USERS_DATASOURCE)
+    private readonly datasource: IUsersDatasource,
+  ) {}
 
   async findOrCreateUser(
     firebaseUid: string,
@@ -12,27 +15,19 @@ export class UsersService {
     name?: string,
     role?: UserRole,
   ) {
-    let user = await this.prisma.client.user.findUnique({
-      where: { firebaseUid },
-    });
+    let user = await this.datasource.findByFirebaseUid(firebaseUid);
 
     if (!user) {
-      user = await this.prisma.client.user.create({
-        data: {
-          firebaseUid,
-          email,
-          name,
-          role: role ?? UserRole.STUDENT,
-        },
+      user = await this.datasource.create({
+        firebaseUid,
+        email,
+        name,
+        role: role ?? UserRole.STUDENT,
       });
 
       // If they are a teacher, also create TeacherProfile
       if (user.role === UserRole.TEACHER) {
-        await this.prisma.client.teacherProfile.create({
-          data: {
-            userId: user.id,
-          },
-        });
+        await this.datasource.createTeacherProfile(user.id);
       }
     }
 
@@ -40,9 +35,6 @@ export class UsersService {
   }
 
   async getCurrentUser(firebaseUid: string) {
-    return this.prisma.client.user.findUnique({
-      where: { firebaseUid },
-      include: { teacherProfile: true },
-    });
+    return this.datasource.findByFirebaseUidWithProfile(firebaseUid);
   }
 }
