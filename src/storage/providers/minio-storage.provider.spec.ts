@@ -37,6 +37,7 @@ describe('MinioStorageProvider', () => {
       }),
       removeObject: jest.fn().mockResolvedValue({}),
       presignedGetObject: jest.fn().mockResolvedValue('http://presigned-url'),
+      presignedPutObject: jest.fn().mockResolvedValue('http://upload-url'),
       statObject: jest.fn().mockResolvedValue({}),
       bucketExists: jest.fn().mockResolvedValue(true),
       makeBucket: jest.fn().mockResolvedValue({}),
@@ -90,10 +91,18 @@ describe('MinioStorageProvider', () => {
   });
 
   describe('getPresignedUrl', () => {
-    it('should generate a URL', async () => {
+    it('should generate a GET URL', async () => {
       const url = await provider.getPresignedUrl('test.txt');
       expect(url).toBe('http://presigned-url');
       expect(mockMinioClient.presignedGetObject).toHaveBeenCalledWith('test-bucket', 'test.txt', 3600);
+    });
+  });
+
+  describe('getPresignedUploadUrl', () => {
+    it('should generate a PUT URL', async () => {
+      const url = await provider.getPresignedUploadUrl('test.txt');
+      expect(url).toBe('http://upload-url');
+      expect(mockMinioClient.presignedPutObject).toHaveBeenCalledWith('test-bucket', 'test.txt', 3600);
     });
   });
 

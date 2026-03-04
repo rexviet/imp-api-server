@@ -34,9 +34,14 @@ export interface IStorageProvider {
   delete(path: string): Promise<void>;
 
   /**
-   * Generates a presigned URL for temporary access to a file
+   * Generates a presigned URL for temporary access to a file (reading)
    */
   getPresignedUrl(path: string, expiresIn?: number): Promise<string>;
+
+  /**
+   * Generates a presigned URL for uploading a file (writing)
+   */
+  getPresignedUploadUrl(path: string, expiresIn?: number): Promise<string>;
 
   /**
    * Checks if a file exists in the storage provider

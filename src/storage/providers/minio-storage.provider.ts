@@ -110,7 +110,21 @@ export class MinioStorageProvider
       return await this.client.presignedGetObject(this.bucket, path, expiresIn);
     } catch (error) {
       this.logger.error(
-        `Failed to generate presigned URL for MinIO: ${error.message}`,
+        `Failed to generate presigned GET URL for MinIO: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
+  async getPresignedUploadUrl(
+    path: string,
+    expiresIn: number = 3600,
+  ): Promise<string> {
+    try {
+      return await this.client.presignedPutObject(this.bucket, path, expiresIn);
+    } catch (error) {
+      this.logger.error(
+        `Failed to generate presigned PUT URL for MinIO: ${error.message}`,
       );
       throw error;
     }
