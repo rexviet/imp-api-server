@@ -10,6 +10,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { AttemptsModule } from './attempts/attempts.module';
 import { SpeakingModule } from './speaking/speaking.module';
+import { AIModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SpeakingModule } from './speaking/speaking.module';
     MockTestsModule,
     AttemptsModule,
     SpeakingModule,
+    AIModule,
   ],
   controllers: [AppController],
   providers: [AppService],
