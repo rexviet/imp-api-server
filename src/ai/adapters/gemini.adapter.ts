@@ -12,7 +12,7 @@ import { IAIEngine, ChatMessage } from '../ai-engine.interface';
 export class GeminiAdapter implements IAIEngine {
   private readonly logger = new Logger(GeminiAdapter.name);
   private genAI: GoogleGenerativeAI;
-  private readonly defaultModel = 'gemini-1.5-pro'; // Or gemini-1.5-flash for speed
+  private readonly defaultModel = 'gemini-2.5-flash'; // Or gemini-1.5-flash for speed
 
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
