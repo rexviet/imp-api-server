@@ -1,26 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CreditsService } from './credits.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { CREDITS_DATASOURCE, ICreditsDatasource } from './credits.datasource';
 import { NotFoundException } from '@nestjs/common';
-import { TransactionType } from '@prisma/client';
 
 describe('CreditsService', () => {
   let service: CreditsService;
-  let prismaService: PrismaService;
 
-  const mockTx = {
-    user: { update: jest.fn() },
-    transaction: { create: jest.fn() },
-  };
-
-  const mockPrismaClient = {
-    user: {
-      findUnique: jest.fn(),
-    },
-    transaction: {
-      findMany: jest.fn(),
-    },
-    $transaction: jest.fn().mockImplementation((callback) => callback(mockTx)),
+  const mockDatasource: ICreditsDatasource = {
+    findUserByFirebaseUid: jest.fn(),
+    topUpCreditsTransaction: jest.fn(),
+    findTransactionsByUserId: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -28,84 +17,61 @@ describe('CreditsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CreditsService,
-        {
-          provide: PrismaService,
-          useValue: { client: mockPrismaClient },
-        },
+        { provide: CREDITS_DATASOURCE, useValue: mockDatasource },
       ],
     }).compile();
 
     service = module.get<CreditsService>(CreditsService);
-    prismaService = module.get<PrismaService>(PrismaService);
   });
 
   describe('topUpCredits', () => {
     it('should throw NotFoundException if user not found', async () => {
-      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue(null);
       await expect(service.topUpCredits('uid1', 100)).rejects.toThrow(
         NotFoundException,
       );
     });
 
-    it('should correctly run a transaction to update user credits and create transaction history', async () => {
-      const mockUser = {
-        id: 'my_user_id',
-        firebaseUid: 'uid1',
-        creditBalance: 100,
-      };
-      const updatedUser = { ...mockUser, creditBalance: 200 };
-      const createdTx = {
-        id: 'tx_id',
-        amount: 100,
-        type: TransactionType.TOPUP,
+    it('should call datasource topUpCreditsTransaction with correct params', async () => {
+      const mockUser = { id: 'my_user_id', firebaseUid: 'uid1', creditBalance: 100 };
+      const mockResult = {
+        user: { ...mockUser, creditBalance: 200 },
+        transaction: { id: 'tx_id', amount: 100, type: 'TOPUP' },
       };
 
-      mockPrismaClient.user.findUnique.mockResolvedValue(mockUser);
-      mockTx.user.update.mockResolvedValue(updatedUser);
-      mockTx.transaction.create.mockResolvedValue(createdTx);
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue(mockUser);
+      (mockDatasource.topUpCreditsTransaction as jest.Mock).mockResolvedValue(mockResult);
 
       const result = await service.topUpCredits('uid1', 100);
 
-      expect(result).toEqual({ user: updatedUser, transaction: createdTx });
-      expect(mockPrismaClient.$transaction).toHaveBeenCalled();
-      expect(mockTx.user.update).toHaveBeenCalledWith({
-        where: { id: 'my_user_id' },
-        data: { creditBalance: { increment: 100 } },
-      });
-      expect(mockTx.transaction.create).toHaveBeenCalledWith({
-        data: {
-          userId: 'my_user_id',
-          amount: 100,
-          type: TransactionType.TOPUP,
-          description: 'Mock Top-up: 100 credits',
-        },
-      });
+      expect(result).toEqual(mockResult);
+      expect(mockDatasource.topUpCreditsTransaction).toHaveBeenCalledWith(
+        'my_user_id',
+        100,
+        'Mock Top-up: 100 credits',
+      );
     });
   });
 
   describe('getTransactions', () => {
     it('should throw NotFoundException if user not found', async () => {
-      mockPrismaClient.user.findUnique.mockResolvedValue(null);
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue(null);
       await expect(service.getTransactions('uid2')).rejects.toThrow(
         NotFoundException,
       );
     });
 
-    it('should return 50 latest transactions', async () => {
+    it('should return transactions from datasource', async () => {
       const mockUser = { id: 'my_user_id' };
       const mockTransactions = [{ id: 'tx1' }, { id: 'tx2' }];
 
-      mockPrismaClient.user.findUnique.mockResolvedValue(mockUser);
-      mockPrismaClient.transaction.findMany.mockResolvedValue(mockTransactions);
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue(mockUser);
+      (mockDatasource.findTransactionsByUserId as jest.Mock).mockResolvedValue(mockTransactions);
 
       const result = await service.getTransactions('uid2');
 
       expect(result).toEqual(mockTransactions);
-      expect(mockPrismaClient.transaction.findMany).toHaveBeenCalledWith({
-        where: { userId: 'my_user_id' },
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      });
+      expect(mockDatasource.findTransactionsByUserId).toHaveBeenCalledWith('my_user_id', 50);
     });
   });
 });

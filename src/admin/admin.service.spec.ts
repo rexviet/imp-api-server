@@ -1,16 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminService } from './admin.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { ADMIN_DATASOURCE, IAdminDatasource } from './admin.datasource';
 import { TestDifficulty, SectionType } from '@prisma/client';
 
 describe('AdminService', () => {
   let service: AdminService;
 
-  const mockPrismaClient = {
-    mockTest: {
-      create: jest.fn(),
-      findMany: jest.fn(),
-    },
+  const mockDatasource: IAdminDatasource = {
+    createMockTest: jest.fn(),
+    findAllMockTests: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -18,7 +16,7 @@ describe('AdminService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AdminService,
-        { provide: PrismaService, useValue: { client: mockPrismaClient } },
+        { provide: ADMIN_DATASOURCE, useValue: mockDatasource },
       ],
     }).compile();
 
@@ -30,7 +28,7 @@ describe('AdminService', () => {
   });
 
   describe('seedMockTest', () => {
-    it('should create a mock test with nested sections/questions', async () => {
+    it('should delegate to datasource createMockTest', async () => {
       const mockData = {
         title: 'Mock Test',
         difficulty: TestDifficulty.ACADEMIC,
@@ -43,45 +41,27 @@ describe('AdminService', () => {
         ],
       };
 
-      mockPrismaClient.mockTest.create.mockResolvedValue({
+      (mockDatasource.createMockTest as jest.Mock).mockResolvedValue({
         id: 'test-id',
         ...mockData,
       });
 
       const result = await service.seedMockTest(mockData);
 
-      expect(mockPrismaClient.mockTest.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            title: 'Mock Test',
-            sections: {
-              create: expect.arrayContaining([
-                expect.objectContaining({
-                  type: SectionType.READING,
-                  questions: {
-                    create: expect.arrayContaining([
-                      expect.objectContaining({ order: 1 }),
-                    ]),
-                  },
-                }),
-              ]),
-            },
-          }),
-        }),
-      );
+      expect(mockDatasource.createMockTest).toHaveBeenCalledWith(mockData);
       expect(result).toHaveProperty('id', 'test-id');
     });
   });
 
   describe('getAllMockTests', () => {
-    it('should return all mock tests with sections', async () => {
-      mockPrismaClient.mockTest.findMany.mockResolvedValue([
+    it('should delegate to datasource findAllMockTests', async () => {
+      (mockDatasource.findAllMockTests as jest.Mock).mockResolvedValue([
         { title: 'Test 1' },
       ]);
 
       const result = await service.getAllMockTests();
 
-      expect(mockPrismaClient.mockTest.findMany).toHaveBeenCalled();
+      expect(mockDatasource.findAllMockTests).toHaveBeenCalled();
       expect(result).toHaveLength(1);
     });
   });

@@ -1,44 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import {
+  IMockTestsDatasource,
+  MOCK_TESTS_DATASOURCE,
+} from './mock-tests.datasource';
 
 @Injectable()
 export class MockTestsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(MOCK_TESTS_DATASOURCE)
+    private readonly datasource: IMockTestsDatasource,
+  ) {}
 
   async findAll() {
-    return this.prisma.client.mockTest.findMany({
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        difficulty: true,
-        createdAt: true,
-        _count: { select: { sections: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.datasource.findAll();
   }
 
   async findById(id: string) {
-    const test = await this.prisma.client.mockTest.findUnique({
-      where: { id },
-      include: {
-        sections: {
-          orderBy: { order: 'asc' },
-          include: {
-            questions: {
-              orderBy: { order: 'asc' },
-              select: {
-                id: true,
-                order: true,
-                content: true,
-                // answerKey is intentionally excluded — students should NOT see answers
-              },
-            },
-          },
-        },
-      },
-    });
+    const test = await this.datasource.findByIdForStudent(id);
 
     if (!test) {
       throw new NotFoundException(`Mock test with id "${id}" not found`);
