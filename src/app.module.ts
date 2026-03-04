@@ -11,6 +11,7 @@ import { MockTestsModule } from './mock-tests/mock-tests.module';
 import { AttemptsModule } from './attempts/attempts.module';
 import { SpeakingModule } from './speaking/speaking.module';
 import { AIModule } from './ai/ai.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { AIModule } from './ai/ai.module';
     AttemptsModule,
     SpeakingModule,
     AIModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -115,7 +115,9 @@ model UserAttempt {
   answers          Json?         // Student's answer payload mapping to Question IDs
   aiGrades         Json?         // Instant grades from Gemini
   score            Float?        // Final overall band score
-  masterAudioUrl   String?       // GCS link for human review
+  masterAudioUrl   String?       // Canonical or presigned URL
+  masterAudioBucket String?      // MinIO/S3 bucket name
+  masterAudioPath   String?      // File path within bucket (e.g. speaking/uid/attemptId.webm)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
