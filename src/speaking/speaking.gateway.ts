@@ -14,10 +14,11 @@ import { WsAuthGuard } from '../auth/ws-auth.guard';
 import { SpeakingSessionService } from './speaking-session.service';
 
 @WebSocketGateway({
-  cors: {
-    origin: '*',
-  },
   namespace: 'speaking',
+  cors: {
+    origin: true,
+    credentials: true,
+  },
 })
 @UseGuards(WsAuthGuard)
 export class SpeakingGateway
@@ -40,6 +41,7 @@ export class SpeakingGateway
   }
 
   handleDisconnect(client: Socket) {
+    console.log(`[DISCONNECT] Client disconnected: ${client.id}, Reason: ${client.connected ? 'STILL CONNECTED' : 'CLOSED'}`);
     this.logger.log(`Client disconnected: ${client.id}`);
     const attemptId = this.clientToAttemptMap.get(client.id);
     if (attemptId) {
