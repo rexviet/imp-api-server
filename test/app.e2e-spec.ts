@@ -4,6 +4,8 @@ import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { FirebaseAuthGuard } from '../src/auth/auth.guard';
 import { RolesGuard } from '../src/auth/roles.guard';
+import { FirebaseService } from '../src/firebase/firebase.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 import { USERS_DATASOURCE } from '../src/users/users.datasource';
 import { CREDITS_DATASOURCE } from '../src/credits/credits.datasource';
 import { MOCK_TESTS_DATASOURCE } from '../src/mock-tests/mock-tests.datasource';
@@ -65,6 +67,11 @@ describe('API Endpoints (e2e)', () => {
       })
       .overrideGuard(RolesGuard)
       .useValue({ canActivate: () => true })
+      // Override infrastructure services (Firebase + Prisma) to avoid real connections in CI
+      .overrideProvider(FirebaseService)
+      .useValue({ onModuleInit: jest.fn(), verifyToken: jest.fn(), getAuth: jest.fn() })
+      .overrideProvider(PrismaService)
+      .useValue({ client: {}, onModuleInit: jest.fn(), onModuleDestroy: jest.fn() })
       // Override all datasources
       .overrideProvider(USERS_DATASOURCE)
       .useValue(mockUsersDatasource)
