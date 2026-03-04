@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SpeakingSessionService } from './speaking-session.service';
 import { AIService } from '../ai/ai.service';
 import { SttService } from './stt.service';
+import { IStorageProvider } from '../common/interfaces/storage-provider.interface';
+import { PrismaService } from '../prisma/prisma.service';
 import { ChatMessage } from '../ai/ai-engine.interface';
 
 describe('SpeakingSessionService', () => {
@@ -18,11 +20,30 @@ describe('SpeakingSessionService', () => {
       transcribeAudio: jest.fn().mockResolvedValue('User Transcript'),
     } as any;
 
+    const mockStorageProvider = {
+      getPresignedUploadUrl: jest.fn().mockResolvedValue('http://upload-url'),
+      getPresignedUrl: jest.fn().mockResolvedValue('http://download-url'),
+    };
+
+    const mockPrismaService = {
+      client: {
+        userAttempt: {
+          update: jest.fn().mockResolvedValue({}),
+          findUnique: jest.fn().mockResolvedValue({
+            masterAudioBucket: 'test-bucket',
+            masterAudioPath: 'test-path',
+          }),
+        },
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SpeakingSessionService,
         { provide: AIService, useValue: mockAiService },
         { provide: SttService, useValue: mockSttService },
+        { provide: 'IStorageProvider', useValue: mockStorageProvider },
+        { provide: PrismaService, useValue: mockPrismaService },
       ],
     }).compile();
 
@@ -48,6 +69,21 @@ describe('SpeakingSessionService', () => {
       );
     });
   });
+
+  describe('createUploadUrl', () => {
+    it('generates a presigned URL and updates db', async () => {
+      const url = await service.createUploadUrl('u-1');
+      expect(url).toBe('http://upload-url');
+    });
+  });
+
+  describe('getDownloadUrl', () => {
+    it('retrieves path from db and returns provider url', async () => {
+      const url = await service.getDownloadUrl('d-1');
+      expect(url).toBe('http://download-url');
+    });
+  });
+
 
   describe('processTurn', () => {
     it('throws error if session not initialized', async () => {
