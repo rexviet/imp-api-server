@@ -67,13 +67,12 @@ describe('SttService', () => {
       expect(res).toContain('Mocked Speech-to-Text');
     });
 
-    it('should catch errors cleanly', async () => {
+    it('should catch errors cleanly and rethrow', async () => {
       // Temporarily break recognize method
       const serviceAny = service as any;
       serviceAny.client.recognize = jest.fn().mockRejectedValue(new Error('GCP Error'));
 
-      const res = await service.transcribeAudio('base64');
-      expect(res).toContain('Transcription error: GCP Error');
+      await expect(service.transcribeAudio('base64')).rejects.toThrow('STT Transcription failed: GCP Error');
     });
   });
 });

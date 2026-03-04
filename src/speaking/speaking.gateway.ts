@@ -27,6 +27,7 @@ export class SpeakingGateway
   server: Server;
 
   private logger: Logger = new Logger('SpeakingGateway');
+  private clientToAttemptMap = new Map<string, string>();
 
   constructor(private speakingSessionService: SpeakingSessionService) {}
 
@@ -40,13 +41,19 @@ export class SpeakingGateway
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
-    // Ideally we would unmap client.id -> attemptId and endSession if abrupt
+    const attemptId = this.clientToAttemptMap.get(client.id);
+    if (attemptId) {
+      this.logger.log(`Cleaning up session for attempt: ${attemptId} after abrupt disconnect`);
+      this.speakingSessionService.endSession(attemptId);
+      this.clientToAttemptMap.delete(client.id);
+    }
   }
 
   @SubscribeMessage('join-speaking-test')
   async handleJoin(@MessageBody() data: { attemptId: string }, @ConnectedSocket() client: Socket) {
     this.logger.log(`Client ${client.id} joined attempt: ${data.attemptId}`);
     client.join(data.attemptId);
+    this.clientToAttemptMap.set(client.id, data.attemptId);
     
     try {
       // Initialize Gemini Chat context and get opener
@@ -91,6 +98,7 @@ export class SpeakingGateway
   handleEnd(@MessageBody() data: { attemptId: string }, @ConnectedSocket() client: Socket) {
     this.logger.log(`Client ${client.id} ended attempt ${data.attemptId}`);
     this.speakingSessionService.endSession(data.attemptId);
+    this.clientToAttemptMap.delete(client.id);
     client.leave(data.attemptId);
   }
 }

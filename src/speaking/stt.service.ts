@@ -65,9 +65,8 @@ export class SttService {
     } catch (error) {
       this.logger.error('STT Transcription failed', error.stack);
       
-      // Since webm/opus via gRPC can be finicky depending on browser encoding, 
-      // let's try a fallback generic encoding if it fails or throw.
-      return 'Transcription error: ' + error.message;
+      // Rethrow to be caught by the gateway and emitted as an error event to the client
+      throw new Error('STT Transcription failed: ' + error.message);
     }
   }
 }

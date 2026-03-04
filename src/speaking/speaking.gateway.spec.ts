@@ -91,4 +91,22 @@ describe('SpeakingGateway', () => {
       expect(mockSocket.leave).toHaveBeenCalledWith('test-attempt-id');
     });
   });
+
+  describe('handleDisconnect', () => {
+    it('should clean up session if client was joined to an attempt', async () => {
+      const data = { attemptId: 'disc-attempt' };
+      
+      // First join to set the mapping
+      await gateway.handleJoin(data, mockSocket as Socket);
+      
+      // Then trigger disconnect
+      gateway.handleDisconnect(mockSocket as Socket);
+
+      expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith('disc-attempt');
+    });
+
+    it('should not throw if client was not in an attempt', () => {
+      expect(() => gateway.handleDisconnect(mockSocket as Socket)).not.toThrow();
+    });
+  });
 });
