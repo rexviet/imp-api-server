@@ -1,7 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { AIService } from '../ai/ai.service';
 import { ChatMessage } from '../ai/ai-engine.interface';
 import { SttService } from './stt.service';
+import { IStorageProvider } from '../common/interfaces/storage-provider.interface';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class SpeakingSessionService {
@@ -13,7 +15,49 @@ export class SpeakingSessionService {
   constructor(
     private readonly aiService: AIService,
     private readonly sttService: SttService,
+    @Inject('IStorageProvider')
+    private readonly storageProvider: IStorageProvider,
+    private readonly prisma: PrismaService,
   ) {}
+
+  /**
+   * Generates a presigned upload URL for the master record.
+   * Updates the attempt record with the planned storage path.
+   */
+  async createUploadUrl(attemptId: string): Promise<string> {
+    const path = `speaking/master-records/${attemptId}.webm`;
+    const bucket = process.env.MINIO_BUCKET || 'ielts-master-records';
+
+    const uploadUrl = await this.storageProvider.getPresignedUploadUrl(path);
+
+    // Update the database with storage details (before upload completes is fine)
+    await (this.prisma.client as any).userAttempt.update({
+      where: { id: attemptId },
+      data: {
+        masterAudioBucket: bucket,
+        masterAudioPath: path,
+      },
+    });
+
+    return uploadUrl;
+  }
+
+  /**
+   * Generates a presigned GET URL for reviewing the master record.
+   */
+  async getDownloadUrl(attemptId: string): Promise<string> {
+    const attempt = await (this.prisma.client as any).userAttempt.findUnique({
+      where: { id: attemptId },
+      select: { masterAudioBucket: true, masterAudioPath: true },
+    });
+
+    if (!attempt || !attempt.masterAudioPath) {
+      throw new Error('Master record not found for this attempt');
+    }
+
+    return this.storageProvider.getPresignedUrl(attempt.masterAudioPath);
+  }
+
 
   /**
    * Initializes a session and returns the examiner's opening line.

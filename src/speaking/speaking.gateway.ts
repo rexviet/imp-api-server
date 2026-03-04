@@ -103,4 +103,19 @@ export class SpeakingGateway
     this.clientToAttemptMap.delete(client.id);
     client.leave(data.attemptId);
   }
+
+  @SubscribeMessage('request-upload-url')
+  async handleRequestUploadUrl(
+    @MessageBody() data: { attemptId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      this.logger.log(`Client ${client.id} requesting upload URL for attempt ${data.attemptId}`);
+      const uploadUrl = await this.speakingSessionService.createUploadUrl(data.attemptId);
+      client.emit('upload-url-ready', { uploadUrl });
+    } catch (err) {
+      this.logger.error(`Error generating upload URL: ${err.message}`);
+      client.emit('error', { message: 'Failed to generate upload URL' });
+    }
+  }
 }
