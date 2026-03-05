@@ -61,7 +61,7 @@ describe('SpeakingGateway', () => {
       await gateway.handleJoin(data, mockSocket as Socket);
 
       expect(mockSocket.join).toHaveBeenCalledWith('test-attempt-id');
-      expect(mockSpeakingSessionService.initializeSession).toHaveBeenCalledWith('test-attempt-id');
+      expect(mockSpeakingSessionService.initializeSession).toHaveBeenCalledWith('test-attempt-id', undefined);
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-ready', {
         message: 'Hello from AI',
       });

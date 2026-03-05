@@ -62,14 +62,20 @@ export class SpeakingSessionService {
   /**
    * Initializes a session and returns the examiner's opening line.
    */
-  async initializeSession(attemptId: string): Promise<string> {
+  async initializeSession(attemptId: string, questionContext?: string): Promise<string> {
     const systemPrompt: ChatMessage = {
       role: 'system',
       content: `You are an IELTS Speaking examiner. 
-Maintain a friendly but professional tone. Do not write actions. Only output speech.
+Maintain a friendly but professional tone. Do not write actions (like *nodding* or *smiling*). Only output speech.
 Keep responses concise, conversational, and under 50 words.
 Ask one question at a time and wait for the student's response.
-Start by welcoming the student to the IELTS speaking test Part 1, ask for their full name, and then proceed to a light introductory question.`
+
+CURRENT TASK: 
+${questionContext || "Start by welcoming the student to the IELTS speaking test Part 1, ask for their full name, and then proceed to a light introductory question."}
+
+INSTRUCTION: 
+If this is Part 2 (Cue Card), ask the student to begin their 2-minute talk based on the card. 
+Otherwise, start the conversation naturally based on the task description above.`
     };
 
     const initialHistory: ChatMessage[] = [systemPrompt];
