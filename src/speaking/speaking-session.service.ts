@@ -9,8 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 export class SpeakingSessionService {
   private readonly logger = new Logger(SpeakingSessionService.name);
 
-  // In-memory sessions structure: Map<attemptId, ChatMessage[]>
-  private sessions = new Map<string, ChatMessage[]>();
+  // In-memory sessions structure: Map<attemptId, { history: ChatMessage[], questionId: string }>
+  private sessions = new Map<string, { history: ChatMessage[]; questionId: string }>();
 
   constructor(
     private readonly aiService: AIService,
@@ -30,8 +30,8 @@ export class SpeakingSessionService {
 
     const uploadUrl = await this.storageProvider.getPresignedUploadUrl(path);
 
-    // Update the database with storage details (before upload completes is fine)
-    await (this.prisma.client as any).userAttempt.update({
+    // Update the database with storage details
+    await this.prisma.client.userAttempt.update({
       where: { id: attemptId },
       data: {
         masterAudioBucket: bucket,
@@ -46,7 +46,7 @@ export class SpeakingSessionService {
    * Generates a presigned GET URL for reviewing the master record.
    */
   async getDownloadUrl(attemptId: string): Promise<string> {
-    const attempt = await (this.prisma.client as any).userAttempt.findUnique({
+    const attempt = await this.prisma.client.userAttempt.findUnique({
       where: { id: attemptId },
       select: { masterAudioBucket: true, masterAudioPath: true },
     });
@@ -62,7 +62,7 @@ export class SpeakingSessionService {
   /**
    * Initializes a session and returns the examiner's opening line.
    */
-  async initializeSession(attemptId: string, questionContext?: string): Promise<string> {
+  async initializeSession(attemptId: string, questionId: string, questionContext?: string): Promise<string> {
     const systemPrompt: ChatMessage = {
       role: 'system',
       content: `You are an IELTS Speaking examiner. 
@@ -78,20 +78,19 @@ If this is Part 2 (Cue Card), ask the student to begin their 2-minute talk based
 Otherwise, start the conversation naturally based on the task description above.`
     };
 
-    const initialHistory: ChatMessage[] = [systemPrompt];
+    const initialHistory: ChatMessage[] = [
+      systemPrompt,
+      { role: 'user', content: '(The student walks in and sits down. Begin the test.)' }
+    ];
     
-    // Have the AI generate the real first question based on the prompt
-    // Wait, since there is no 'user' turn yet, Gemini might object if the first turn is not 'user'.
-    // Gemini normally requires the chat to start with user. 
-    // Let's seed the conversation to prompt the examiner to start.
-    
-    initialHistory.push({ role: 'user', content: '(The student walks in and sits down. Begin the test.)' });
-    
-    this.sessions.set(attemptId, initialHistory);
-
     const examinerOpening = await this.aiService.generateResponse(initialHistory);
     initialHistory.push({ role: 'model', content: examinerOpening });
     
+    this.sessions.set(attemptId, { 
+      history: initialHistory, 
+      questionId 
+    });
+
     return examinerOpening;
   }
 
@@ -99,8 +98,8 @@ Otherwise, start the conversation naturally based on the task description above.
    * Processes a turn: Audio -> STT -> LLM -> Reply
    */
   async processTurn(attemptId: string, audioBase64: string): Promise<{ transcript: string, nextQuestion: string }> {
-    const history = this.sessions.get(attemptId);
-    if (!history) {
+    const session = this.sessions.get(attemptId);
+    if (!session) {
       this.logger.error(`Attempt ${attemptId} has no active session.`);
       throw new Error('Session not initialized');
     }
@@ -112,12 +111,12 @@ Otherwise, start the conversation naturally based on the task description above.
       throw new Error('Could not transcribe audio (no speech detected)');
     }
 
-    history.push({ role: 'user', content: studentTranscript });
+    session.history.push({ role: 'user', content: studentTranscript });
 
     // 2. Generate Reply using Gemini AI Adapter
-    const examinerReply = await this.aiService.generateResponse(history);
+    const examinerReply = await this.aiService.generateResponse(session.history);
     
-    history.push({ role: 'model', content: examinerReply });
+    session.history.push({ role: 'model', content: examinerReply });
 
     return {
       transcript: studentTranscript,
@@ -125,7 +124,31 @@ Otherwise, start the conversation naturally based on the task description above.
     };
   }
 
-  endSession(attemptId: string) {
-    this.sessions.delete(attemptId);
+  async endSession(attemptId: string) {
+    const session = this.sessions.get(attemptId);
+    if (session) {
+      try {
+        // Persist transcript to the attempt record
+        const attempt = await this.prisma.client.userAttempt.findUnique({
+          where: { id: attemptId }
+        });
+
+        const currentAnswers = (attempt?.answers as Record<string, any>) || {};
+        currentAnswers[session.questionId] = {
+          type: 'speaking_transcript',
+          history: session.history.filter(m => m.role !== 'system' && !m.content.includes('(The student walks in'))
+        };
+
+        await this.prisma.client.userAttempt.update({
+          where: { id: attemptId },
+          data: { answers: currentAnswers }
+        });
+
+        this.logger.log(`Persisted speaking transcript for attempt ${attemptId}, question ${session.questionId}`);
+      } catch (err) {
+        this.logger.error(`Failed to persist speaking transcript: ${err.message}`);
+      }
+      this.sessions.delete(attemptId);
+    }
   }
 }
