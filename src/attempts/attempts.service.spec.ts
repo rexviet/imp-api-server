@@ -7,9 +7,11 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AttemptStatus } from '@prisma/client';
+import { AIGradingService } from './grading/ai-grading.service';
 
 describe('AttemptsService', () => {
   let service: AttemptsService;
+  let aiGradingService: AIGradingService;
 
   const mockDatasource: IAttemptsDatasource = {
     findUserByFirebaseUid: jest.fn(),
@@ -22,16 +24,23 @@ describe('AttemptsService', () => {
     updateAttemptGrades: jest.fn(),
   };
 
+  const mockAIGradingService = {
+    gradeWriting: jest.fn(),
+    gradeSpeaking: jest.fn(),
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttemptsService,
         { provide: ATTEMPTS_DATASOURCE, useValue: mockDatasource },
+        { provide: AIGradingService, useValue: mockAIGradingService },
       ],
     }).compile();
 
     service = module.get<AttemptsService>(AttemptsService);
+    aiGradingService = module.get<AIGradingService>(AIGradingService);
   });
 
   describe('Initialization', () => {
@@ -184,54 +193,98 @@ describe('AttemptsService', () => {
       expect(result.status).toBe(AttemptStatus.COMPLETED);
     });
 
-    it('should calculate band scores and call updateAttemptGrades on submission', async () => {
+    it('should call AIGradingService for Writing and Speaking sections', async () => {
       (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
 
-      const mockAttemptWithTest = {
+      const mockAttempt = {
         id: 'a1',
         userId: 'u1',
         status: AttemptStatus.IN_PROGRESS,
-        answers: { q1: 'A', q2: 'listening answer' },
+        answers: { 
+          q_writing: 'A very long essay about something interesting...',
+          q_speaking: { type: 'speaking_transcript', history: [] } 
+        },
         test: {
           sections: [
             {
-              id: 's1',
-              type: 'READING',
-              questions: [{ id: 'q1', answerKey: { value: 'A' } }],
+              id: 's_w',
+              type: 'WRITING',
+              questions: [{ id: 'q_writing', content: { text: 'Describe a city' } }],
             },
             {
-              id: 's2',
-              type: 'LISTENING',
-              questions: [
-                {
-                  id: 'q2',
-                  answerKey: { values: ['listening answer', 'alternative'] },
-                },
-              ],
+              id: 's_s',
+              type: 'SPEAKING',
+              questions: [{ id: 'q_speaking' }],
             },
           ],
         },
       };
 
-      (mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock).mockResolvedValue(
-        mockAttemptWithTest,
-      );
-      (mockDatasource.updateAttemptGrades as jest.Mock).mockResolvedValue({
-        id: 'a1',
-        status: AttemptStatus.COMPLETED,
-      });
+      (mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock).mockResolvedValue(mockAttempt);
+      (mockAIGradingService.gradeWriting as jest.Mock).mockResolvedValue({ overallBand: 7.0 });
+      (mockAIGradingService.gradeSpeaking as jest.Mock).mockResolvedValue({ overallBand: 6.5 });
+      (mockDatasource.updateAttemptGrades as jest.Mock).mockResolvedValue({ id: 'a1', status: 'COMPLETED' });
 
       await service.submit('uid1', 'a1');
 
+      expect(aiGradingService.gradeWriting).toHaveBeenCalledWith('Describe a city', expect.any(String));
+      expect(aiGradingService.gradeSpeaking).toHaveBeenCalled();
       expect(mockDatasource.updateAttemptGrades).toHaveBeenCalledWith(
         'a1',
         expect.objectContaining({
-          s1: expect.objectContaining({ rawScore: 1, bandScore: expect.any(Number) }),
-          s2: expect.objectContaining({ rawScore: 1, bandScore: expect.any(Number) }),
+          s_w: expect.objectContaining({ bandScore: 7.0, status: 'COMPLETED' }),
+          s_s: expect.objectContaining({ bandScore: 6.5, status: 'COMPLETED' }),
         }),
         expect.any(Number),
+        expect.objectContaining({
+          q_writing: expect.objectContaining({ overallBand: 7.0 }),
+          q_speaking: expect.objectContaining({ overallBand: 6.5 }),
+        }),
       );
     });
+
+    it('should calculate weighted average (band score) correctly across all modules', async () => {
+        (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+  
+        const mockAttempt = {
+          id: 'a1',
+          userId: 'u1',
+          status: AttemptStatus.IN_PROGRESS,
+          answers: { q1: 'A' }, // 1/1 correct -> Band 9.0 in our simplified lookup for 1 question? No, band 1.0 for s1
+          test: {
+            sections: [
+              {
+                id: 's1',
+                type: 'READING',
+                questions: [{ id: 'q1', answerKey: { value: 'A' } }],
+              },
+              {
+                id: 's2',
+                type: 'WRITING',
+                questions: [{ id: 'q2', content: { text: 'T2' } }],
+              }
+            ],
+          },
+        };
+  
+        (mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock).mockResolvedValue(mockAttempt);
+        (mockAIGradingService.gradeWriting as jest.Mock).mockResolvedValue({ overallBand: 8.0 });
+        (mockAttempt.answers as Record<string, any>)['q2'] = 'The aim of science...';
+
+        await service.submit('uid1', 'a1');
+  
+        // Reading score for 1/1 is usually low in real IELTS, but our grading.utils matches:
+        // Match: if rawScore <= 0 return 0, else match scale. 
+        // 1 correct in Reading matches { min: 0, band: 1.0 }
+        // Reading band: 1.0, Writing band: 8.0 -> Average: 4.5
+        
+        expect(mockDatasource.updateAttemptGrades).toHaveBeenCalledWith(
+          'a1',
+          expect.anything(),
+          4.5, // (1.0 + 8.0) / 2 = 4.5
+          expect.anything()
+        );
+      });
 
     it('should throw if attempt already submitted', async () => {
       (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
