@@ -13,6 +13,7 @@ describe('AttemptsController', () => {
     findById: jest.fn(),
     updateAnswers: jest.fn(),
     submit: jest.fn(),
+    findAllForUser: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -27,6 +28,15 @@ describe('AttemptsController', () => {
 
     controller = module.get<AttemptsController>(AttemptsController);
     service = module.get<AttemptsService>(AttemptsService);
+  });
+
+  it('should list all attempts for user', async () => {
+    const token = { uid: 'uid1' };
+    const result = [{ id: 'a1' }];
+    mockService.findAllForUser.mockResolvedValue(result);
+
+    expect(await controller.findAll(token)).toEqual(result);
+    expect(service.findAllForUser).toHaveBeenCalledWith('uid1');
   });
 
   it('should create an attempt', async () => {

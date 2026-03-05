@@ -22,11 +22,18 @@ describe('AttemptsService', () => {
     findAttemptByIdWithTestAndQuestions: jest.fn(),
     updateAttemptAnswers: jest.fn(),
     updateAttemptGrades: jest.fn(),
+    findAllByUser: jest.fn(),
   };
 
   const mockAIGradingService = {
     gradeWriting: jest.fn(),
     gradeSpeaking: jest.fn(),
+  };
+
+  const mockStorageProvider = {
+    getPresignedUrl: jest.fn(),
+    uploadFile: jest.fn(),
+    deleteFile: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -36,6 +43,7 @@ describe('AttemptsService', () => {
         AttemptsService,
         { provide: ATTEMPTS_DATASOURCE, useValue: mockDatasource },
         { provide: AIGradingService, useValue: mockAIGradingService },
+        { provide: 'IStorageProvider', useValue: mockStorageProvider },
       ],
     }).compile();
 
@@ -46,6 +54,23 @@ describe('AttemptsService', () => {
   describe('Initialization', () => {
     it('should have EXAM_CREDIT_COST set to 10', () => {
       expect((service as any).EXAM_CREDIT_COST).toBe(10);
+    });
+  });
+
+  describe('findAllForUser', () => {
+    it('should throw NotFoundException if user not found', async () => {
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue(null);
+      await expect(service.findAllForUser('uid1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return all attempts for user', async () => {
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      const mockAttempts = [{ id: 'a1', userId: 'u1' }];
+      (mockDatasource.findAllByUser as jest.Mock).mockResolvedValue(mockAttempts);
+
+      const result = await service.findAllForUser('uid1');
+      expect(result).toEqual(mockAttempts);
+      expect(mockDatasource.findAllByUser).toHaveBeenCalledWith('u1');
     });
   });
 
@@ -144,6 +169,40 @@ describe('AttemptsService', () => {
 
       const result = await service.findById('uid1', 'a1');
       expect(result).toEqual(mockAttempt);
+    });
+
+    it('should generate presigned URL if masterAudioPath exists', async () => {
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      const mockAttempt = { 
+        id: 'a1', 
+        userId: 'u1', 
+        masterAudioPath: 'path/to/audio.mp3',
+        test: { sections: [] } 
+      };
+      (mockDatasource.findAttemptByIdWithTest as jest.Mock).mockResolvedValue(mockAttempt);
+      (mockStorageProvider.getPresignedUrl as jest.Mock).mockResolvedValue('https://presigned-url.com');
+
+      const result = await service.findById('uid1', 'a1');
+      expect(result.masterAudioUrl).toBe('https://presigned-url.com');
+      expect(mockStorageProvider.getPresignedUrl).toHaveBeenCalledWith('path/to/audio.mp3');
+    });
+
+    it('should hide answers if attempt is IN_PROGRESS', async () => {
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      const mockAttempt = { 
+        id: 'a1', 
+        userId: 'u1', 
+        status: AttemptStatus.IN_PROGRESS,
+        test: { 
+          sections: [{
+            questions: [{ id: 'q1', answerKey: 'SECRET' }]
+          }] 
+        } 
+      };
+      (mockDatasource.findAttemptByIdWithTest as jest.Mock).mockResolvedValue(mockAttempt);
+
+      const result = await service.findById('uid1', 'a1');
+      expect((result.test.sections[0].questions[0] as any).answerKey).toBeUndefined();
     });
   });
 
