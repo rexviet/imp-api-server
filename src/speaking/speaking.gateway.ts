@@ -52,14 +52,14 @@ export class SpeakingGateway
   }
 
   @SubscribeMessage('join-speaking-test')
-  async handleJoin(@MessageBody() data: { attemptId: string }, @ConnectedSocket() client: Socket) {
+  async handleJoin(@MessageBody() data: { attemptId: string; questionContext?: string }, @ConnectedSocket() client: Socket) {
     this.logger.log(`Client ${client.id} joined attempt: ${data.attemptId}`);
     client.join(data.attemptId);
     this.clientToAttemptMap.set(client.id, data.attemptId);
     
     try {
       // Initialize Gemini Chat context and get opener
-      const opener = await this.speakingSessionService.initializeSession(data.attemptId);
+      const opener = await this.speakingSessionService.initializeSession(data.attemptId, data.questionContext);
       
       client.emit('examiner-ready', {
         message: opener,
