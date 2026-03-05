@@ -28,6 +28,7 @@ export interface IAttemptsDatasource {
     attemptId: string,
     grades: Record<string, any>,
     score: number | null,
+    detailedAiFeedback?: Record<string, any>,
   ): Promise<UserAttempt>;
 }
 
@@ -155,12 +156,16 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
     attemptId: string,
     grades: Record<string, any>,
     score: number | null,
+    detailedAiFeedback?: Record<string, any>,
   ): Promise<UserAttempt> {
     return this.prisma.client.userAttempt.update({
       where: { id: attemptId },
       data: {
         status: AttemptStatus.COMPLETED,
-        aiGrades: grades as any,
+        aiGrades: {
+          sections: grades,
+          detailed: detailedAiFeedback,
+        } as any,
         score,
       },
     });

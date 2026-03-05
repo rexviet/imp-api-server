@@ -5,11 +5,15 @@ import {
   PrismaAttemptsDatasource,
   ATTEMPTS_DATASOURCE,
 } from './attempts.datasource';
+import { AIGradingService } from './grading/ai-grading.service';
+import { AIModule } from '../ai/ai.module';
 
 @Module({
+  imports: [AIModule],
   controllers: [AttemptsController],
   providers: [
     AttemptsService,
+    AIGradingService,
     { provide: ATTEMPTS_DATASOURCE, useClass: PrismaAttemptsDatasource },
   ],
   exports: [AttemptsService],

@@ -11,6 +11,7 @@ import {
   IAttemptsDatasource,
   ATTEMPTS_DATASOURCE,
 } from './attempts.datasource';
+import { AIGradingService } from './grading/ai-grading.service';
 
 @Injectable()
 export class AttemptsService {
@@ -19,6 +20,7 @@ export class AttemptsService {
   constructor(
     @Inject(ATTEMPTS_DATASOURCE)
     private readonly datasource: IAttemptsDatasource,
+    private readonly aiGradingService: AIGradingService,
   ) {}
 
   private async resolveUser(firebaseUid: string) {
@@ -108,10 +110,14 @@ export class AttemptsService {
       throw new BadRequestException('Attempt already submitted');
     }
 
-    const answers = (attempt.answers as Record<string, string>) || {};
+    const answers = (attempt.answers as Record<string, any>) || {};
     const results: Record<string, any> = {};
+    const aiGrades: Record<string, any> = {}; // Store detailed AI feedback
     let bandSums = 0;
     let gradedSectionsCount = 0;
+
+    // We'll collect all AI grading promises to run them in parallel
+    const aiGradingPromises: Promise<any>[] = [];
 
     for (const section of attempt.test.sections) {
       let sectionRawScore = 0;
@@ -154,11 +160,86 @@ export class AttemptsService {
 
         bandSums += band;
         gradedSectionsCount++;
-      } else {
-        sectionDetails.status = 'PENDING_EVALUATION';
-      }
+        results[section.id] = sectionDetails;
+      } 
+      else if (section.type === 'WRITING') {
+        let sectionBandSum = 0;
+        let essayCount = 0;
 
-      results[section.id] = sectionDetails;
+        for (const question of section.questions) {
+          const studentEssay = answers[question.id];
+          if (studentEssay && typeof studentEssay === 'string' && studentEssay.length > 10) {
+            const taskText = (question.content as any).text;
+            
+            const gradePromise = this.aiGradingService.gradeWriting(taskText, studentEssay)
+              .then(grade => {
+                aiGrades[question.id] = grade;
+                return grade.overallBand;
+              })
+              .catch(err => {
+                console.error(`AI Grading failed for writing question ${question.id}:`, err);
+                return null;
+              });
+            
+            aiGradingPromises.push(gradePromise);
+            essayCount++;
+          }
+        }
+
+        sectionDetails.status = 'AI_GRADING_IN_PROGRESS';
+        results[section.id] = sectionDetails;
+      }
+      else if (section.type === 'SPEAKING') {
+        for (const question of section.questions) {
+          const transcriptData = answers[question.id];
+          if (transcriptData && transcriptData.type === 'speaking_transcript') {
+            const gradePromise = this.aiGradingService.gradeSpeaking(transcriptData.history)
+              .then(grade => {
+                aiGrades[question.id] = grade;
+                return grade.overallBand;
+              })
+              .catch(err => {
+                console.error(`AI Grading failed for speaking question ${question.id}:`, err);
+                return null;
+              });
+
+            aiGradingPromises.push(gradePromise);
+          }
+        }
+        sectionDetails.status = 'AI_GRADING_IN_PROGRESS';
+        results[section.id] = sectionDetails;
+      }
+    }
+
+    // Wait for all AI grading to finish
+    const aiResults = await Promise.all(aiGradingPromises);
+    
+    // Aggregate Writing/Speaking scores into overall band
+    aiResults.forEach(score => {
+      if (score !== null) {
+        bandSums += score;
+        gradedSectionsCount++;
+      }
+    });
+
+    // Update section results with final AI scores
+    for (const section of attempt.test.sections) {
+      if (section.type === 'WRITING' || section.type === 'SPEAKING') {
+        let sectionSum = 0;
+        let count = 0;
+        for (const question of section.questions) {
+          if (aiGrades[question.id]) {
+            sectionSum += aiGrades[question.id].overallBand;
+            count++;
+          }
+        }
+        if (count > 0) {
+          results[section.id].bandScore = roundToIELTS(sectionSum / count);
+          results[section.id].status = 'COMPLETED';
+        } else {
+          results[section.id].status = 'NOT_ATTEMPTED';
+        }
+      }
     }
 
     const overallScore =
@@ -166,6 +247,7 @@ export class AttemptsService {
         ? roundToIELTS(bandSums / gradedSectionsCount)
         : null;
 
-    return this.datasource.updateAttemptGrades(attemptId, results, overallScore);
+    // Save detailed AI feedback and final results
+    return this.datasource.updateAttemptGrades(attemptId, results, overallScore, aiGrades);
   }
 }
