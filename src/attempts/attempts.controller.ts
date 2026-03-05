@@ -22,6 +22,11 @@ interface DecodedFirebaseToken {
 export class AttemptsController {
   constructor(private readonly attemptsService: AttemptsService) {}
 
+  @Get()
+  async findAll(@CurrentUser() decodedToken: DecodedFirebaseToken) {
+    return this.attemptsService.findAllForUser(decodedToken.uid);
+  }
+
   @Post()
   async create(
     @CurrentUser() decodedToken: DecodedFirebaseToken,

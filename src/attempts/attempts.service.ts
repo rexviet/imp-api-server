@@ -12,6 +12,7 @@ import {
   ATTEMPTS_DATASOURCE,
 } from './attempts.datasource';
 import { AIGradingService } from './grading/ai-grading.service';
+import { IStorageProvider } from '../common/interfaces/storage-provider.interface';
 
 @Injectable()
 export class AttemptsService {
@@ -21,6 +22,8 @@ export class AttemptsService {
     @Inject(ATTEMPTS_DATASOURCE)
     private readonly datasource: IAttemptsDatasource,
     private readonly aiGradingService: AIGradingService,
+    @Inject('IStorageProvider')
+    private readonly storageProvider: IStorageProvider,
   ) {}
 
   private async resolveUser(firebaseUid: string) {
@@ -29,6 +32,11 @@ export class AttemptsService {
       throw new NotFoundException('User not found');
     }
     return user;
+  }
+
+  async findAllForUser(firebaseUid: string) {
+    const user = await this.resolveUser(firebaseUid);
+    return this.datasource.findAllByUser(user.id);
   }
 
   async create(firebaseUid: string, testId: string) {
@@ -70,6 +78,24 @@ export class AttemptsService {
     }
     if (attempt.userId !== user.id) {
       throw new ForbiddenException('You do not have access to this attempt');
+    }
+
+    // Security: Hide answers if test is still running
+    if (attempt.status === AttemptStatus.IN_PROGRESS) {
+      attempt.test.sections.forEach((s: any) => {
+        s.questions.forEach((q: any) => {
+          delete q.answerKey;
+        });
+      });
+    }
+
+    // Generate Presigned URL for master audio if it exists
+    if (attempt.masterAudioPath) {
+      try {
+        (attempt as any).masterAudioUrl = await this.storageProvider.getPresignedUrl(attempt.masterAudioPath);
+      } catch (err) {
+        console.error('Failed to generate presigned URL for attempt master audio:', err);
+      }
     }
 
     return attempt;
