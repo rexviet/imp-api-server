@@ -17,7 +17,9 @@ export class GeminiAdapter implements IAIEngine {
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
-      this.logger.warn('GEMINI_API_KEY is not defined. AI Engine will fail if called.');
+      this.logger.warn(
+        'GEMINI_API_KEY is not defined. AI Engine will fail if called.',
+      );
     } else {
       this.genAI = new GoogleGenerativeAI(apiKey);
     }
@@ -85,7 +87,7 @@ export class GeminiAdapter implements IAIEngine {
 
     const result = await model.generateContent({ contents });
     const text = result.response.text();
-    
+
     try {
       return JSON.parse(text) as T;
     } catch (e) {

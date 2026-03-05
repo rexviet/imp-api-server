@@ -17,8 +17,8 @@ describe('SpeakingGateway', () => {
       leave: jest.fn(),
       emit: jest.fn(),
       handshake: {
-        auth: { token: 'valid-token' }
-      }
+        auth: { token: 'valid-token' },
+      },
     } as any;
 
     mockServer = {
@@ -42,7 +42,10 @@ describe('SpeakingGateway', () => {
       providers: [
         SpeakingGateway,
         { provide: FirebaseService, useValue: mockFirebaseService },
-        { provide: SpeakingSessionService, useValue: mockSpeakingSessionService },
+        {
+          provide: SpeakingSessionService,
+          useValue: mockSpeakingSessionService,
+        },
       ],
     }).compile();
 
@@ -57,11 +60,13 @@ describe('SpeakingGateway', () => {
   describe('handleJoin', () => {
     it('should join the attempt room and emit examiner-ready via AI session', async () => {
       const data = { attemptId: 'test-attempt-id' };
-      
+
       await gateway.handleJoin(data, mockSocket as Socket);
 
       expect(mockSocket.join).toHaveBeenCalledWith('test-attempt-id');
-      expect(mockSpeakingSessionService.initializeSession).toHaveBeenCalledWith('test-attempt-id');
+      expect(mockSpeakingSessionService.initializeSession).toHaveBeenCalledWith(
+        'test-attempt-id',
+      );
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-ready', {
         message: 'Hello from AI',
       });
@@ -71,10 +76,13 @@ describe('SpeakingGateway', () => {
   describe('handleAudioChunk', () => {
     it('should receive audio chunk and emit examiner-response instantly via AI service', async () => {
       const data = { attemptId: 'test-attempt-id', audio: 'base64-data' };
-      
+
       await gateway.handleAudioChunk(data, mockSocket as Socket);
 
-      expect(mockSpeakingSessionService.processTurn).toHaveBeenCalledWith('test-attempt-id', 'base64-data');
+      expect(mockSpeakingSessionService.processTurn).toHaveBeenCalledWith(
+        'test-attempt-id',
+        'base64-data',
+      );
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-response', {
         transcript: 'I live in London',
         nextQuestion: 'What is the weather like there?',
@@ -87,7 +95,9 @@ describe('SpeakingGateway', () => {
       const data = { attemptId: 'test-attempt-id' };
       gateway.handleEnd(data, mockSocket as Socket);
 
-      expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith('test-attempt-id');
+      expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith(
+        'test-attempt-id',
+      );
       expect(mockSocket.leave).toHaveBeenCalledWith('test-attempt-id');
     });
   });
@@ -95,18 +105,22 @@ describe('SpeakingGateway', () => {
   describe('handleDisconnect', () => {
     it('should clean up session if client was joined to an attempt', async () => {
       const data = { attemptId: 'disc-attempt' };
-      
+
       // First join to set the mapping
       await gateway.handleJoin(data, mockSocket as Socket);
-      
+
       // Then trigger disconnect
       gateway.handleDisconnect(mockSocket as Socket);
 
-      expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith('disc-attempt');
+      expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith(
+        'disc-attempt',
+      );
     });
 
     it('should not throw if client was not in an attempt', () => {
-      expect(() => gateway.handleDisconnect(mockSocket as Socket)).not.toThrow();
+      expect(() =>
+        gateway.handleDisconnect(mockSocket as Socket),
+      ).not.toThrow();
     });
   });
 });

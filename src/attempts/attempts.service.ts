@@ -96,8 +96,9 @@ export class AttemptsService {
   async submit(firebaseUid: string, attemptId: string) {
     const user = await this.resolveUser(firebaseUid);
 
-    const attempt =
-      await this.datasource.findAttemptByIdWithTestAndQuestions(attemptId);
+    const attempt = await this.datasource.findAttemptByIdWithTestAndQuestions(
+      attemptId,
+    );
 
     if (!attempt)
       throw new NotFoundException(`Attempt "${attemptId}" not found`);
@@ -166,6 +167,10 @@ export class AttemptsService {
         ? roundToIELTS(bandSums / gradedSectionsCount)
         : null;
 
-    return this.datasource.updateAttemptGrades(attemptId, results, overallScore);
+    return this.datasource.updateAttemptGrades(
+      attemptId,
+      results,
+      overallScore,
+    );
   }
 }

@@ -61,7 +61,11 @@ describe('API Endpoints (e2e)', () => {
       .useValue({
         canActivate: (context: any) => {
           const req = context.switchToHttp().getRequest();
-          req.user = { uid: 'test_uid_123', email: 'e2e@test.com', name: 'Test User' };
+          req.user = {
+            uid: 'test_uid_123',
+            email: 'e2e@test.com',
+            name: 'Test User',
+          };
           return true;
         },
       })
@@ -69,9 +73,17 @@ describe('API Endpoints (e2e)', () => {
       .useValue({ canActivate: () => true })
       // Override infrastructure services (Firebase + Prisma) to avoid real connections in CI
       .overrideProvider(FirebaseService)
-      .useValue({ onModuleInit: jest.fn(), verifyToken: jest.fn(), getAuth: jest.fn() })
+      .useValue({
+        onModuleInit: jest.fn(),
+        verifyToken: jest.fn(),
+        getAuth: jest.fn(),
+      })
       .overrideProvider(PrismaService)
-      .useValue({ client: {}, onModuleInit: jest.fn(), onModuleDestroy: jest.fn() })
+      .useValue({
+        client: {},
+        onModuleInit: jest.fn(),
+        onModuleDestroy: jest.fn(),
+      })
       // Override all datasources
       .overrideProvider(USERS_DATASOURCE)
       .useValue(mockUsersDatasource)
@@ -253,9 +265,7 @@ describe('API Endpoints (e2e)', () => {
       ];
       mockMockTestsDatasource.findAll.mockResolvedValue(mockTests);
 
-      const res = await request(app.getHttpServer()).get(
-        '/api/v1/mock-tests',
-      );
+      const res = await request(app.getHttpServer()).get('/api/v1/mock-tests');
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual(mockTests);
@@ -360,9 +370,7 @@ describe('API Endpoints (e2e)', () => {
         mockAttempt,
       );
 
-      const res = await request(app.getHttpServer()).get(
-        '/api/v1/attempts/a1',
-      );
+      const res = await request(app.getHttpServer()).get('/api/v1/attempts/a1');
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual(mockAttempt);
@@ -390,9 +398,7 @@ describe('API Endpoints (e2e)', () => {
         userId: 'u999',
       });
 
-      const res = await request(app.getHttpServer()).get(
-        '/api/v1/attempts/a1',
-      );
+      const res = await request(app.getHttpServer()).get('/api/v1/attempts/a1');
 
       expect(res.status).toBe(403);
     });
@@ -504,9 +510,7 @@ describe('API Endpoints (e2e)', () => {
           {
             type: 'READING',
             order: 1,
-            questions: [
-              { order: 1, content: { text: 'Read the passage' } },
-            ],
+            questions: [{ order: 1, content: { text: 'Read the passage' } }],
           },
         ],
       };

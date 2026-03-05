@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AttemptsService } from './attempts.service';
-import { ATTEMPTS_DATASOURCE, IAttemptsDatasource } from './attempts.datasource';
+import {
+  ATTEMPTS_DATASOURCE,
+  IAttemptsDatasource,
+} from './attempts.datasource';
 import {
   NotFoundException,
   ForbiddenException,
@@ -54,9 +57,9 @@ describe('AttemptsService', () => {
         id: 't1',
         title: 'Test',
       });
-      (mockDatasource.createAttemptWithCreditDeduction as jest.Mock).mockRejectedValue(
-        new Error('User not found in transaction'),
-      );
+      (
+        mockDatasource.createAttemptWithCreditDeduction as jest.Mock
+      ).mockRejectedValue(new Error('User not found in transaction'));
 
       await expect(service.create('uid1', 't1')).rejects.toThrow(
         NotFoundException,
@@ -68,9 +71,9 @@ describe('AttemptsService', () => {
         id: 't1',
         title: 'Test',
       });
-      (mockDatasource.createAttemptWithCreditDeduction as jest.Mock).mockRejectedValue(
-        new Error('INSUFFICIENT_CREDITS:10:5'),
-      );
+      (
+        mockDatasource.createAttemptWithCreditDeduction as jest.Mock
+      ).mockRejectedValue(new Error('INSUFFICIENT_CREDITS:10:5'));
 
       await expect(service.create('uid1', 't1')).rejects.toThrow(
         BadRequestException,
@@ -89,36 +92,44 @@ describe('AttemptsService', () => {
         testId: 't1',
         status: AttemptStatus.IN_PROGRESS,
       };
-      (mockDatasource.createAttemptWithCreditDeduction as jest.Mock).mockResolvedValue(
-        mockAttempt,
-      );
+      (
+        mockDatasource.createAttemptWithCreditDeduction as jest.Mock
+      ).mockResolvedValue(mockAttempt);
 
       const result = await service.create('uid1', 't1');
       expect(result).toEqual(mockAttempt);
-      expect(mockDatasource.createAttemptWithCreditDeduction).toHaveBeenCalledWith(
-        'uid1', 't1', 'Test', 10,
-      );
+      expect(
+        mockDatasource.createAttemptWithCreditDeduction,
+      ).toHaveBeenCalledWith('uid1', 't1', 'Test', 10);
     });
   });
 
   describe('findById', () => {
     it('should throw NotFoundException if user not found', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue(null);
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue(
+        null,
+      );
       await expect(service.findById('uid1', 'a1')).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('should throw NotFoundException if attempt not found', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
-      (mockDatasource.findAttemptByIdWithTest as jest.Mock).mockResolvedValue(null);
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
+      (mockDatasource.findAttemptByIdWithTest as jest.Mock).mockResolvedValue(
+        null,
+      );
       await expect(service.findById('uid1', 'a1')).rejects.toThrow(
         NotFoundException,
       );
     });
 
     it('should throw ForbiddenException if attempt belongs to another user', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
       (mockDatasource.findAttemptByIdWithTest as jest.Mock).mockResolvedValue({
         id: 'a1',
         userId: 'u2',
@@ -129,9 +140,13 @@ describe('AttemptsService', () => {
     });
 
     it('should return attempt with test data', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
       const mockAttempt = { id: 'a1', userId: 'u1', test: { sections: [] } };
-      (mockDatasource.findAttemptByIdWithTest as jest.Mock).mockResolvedValue(mockAttempt);
+      (mockDatasource.findAttemptByIdWithTest as jest.Mock).mockResolvedValue(
+        mockAttempt,
+      );
 
       const result = await service.findById('uid1', 'a1');
       expect(result).toEqual(mockAttempt);
@@ -140,7 +155,9 @@ describe('AttemptsService', () => {
 
   describe('updateAnswers', () => {
     it('should throw BadRequestException if attempt is already completed', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
       (mockDatasource.findAttemptById as jest.Mock).mockResolvedValue({
         id: 'a1',
         userId: 'u1',
@@ -153,14 +170,18 @@ describe('AttemptsService', () => {
     });
 
     it('should update answers for in-progress attempt', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
       (mockDatasource.findAttemptById as jest.Mock).mockResolvedValue({
         id: 'a1',
         userId: 'u1',
         status: AttemptStatus.IN_PROGRESS,
       });
       const updatedAttempt = { id: 'a1', answers: { q1: 'A' } };
-      (mockDatasource.updateAttemptAnswers as jest.Mock).mockResolvedValue(updatedAttempt);
+      (mockDatasource.updateAttemptAnswers as jest.Mock).mockResolvedValue(
+        updatedAttempt,
+      );
 
       const result = await service.updateAnswers('uid1', 'a1', { q1: 'A' });
       expect(result).toEqual(updatedAttempt);
@@ -169,8 +190,12 @@ describe('AttemptsService', () => {
 
   describe('submit', () => {
     it('should mark attempt as COMPLETED', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
-      (mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock).mockResolvedValue({
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
+      (
+        mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock
+      ).mockResolvedValue({
         id: 'a1',
         userId: 'u1',
         status: AttemptStatus.IN_PROGRESS,
@@ -178,14 +203,18 @@ describe('AttemptsService', () => {
         test: { sections: [] },
       });
       const submitted = { id: 'a1', status: AttemptStatus.COMPLETED };
-      (mockDatasource.updateAttemptGrades as jest.Mock).mockResolvedValue(submitted);
+      (mockDatasource.updateAttemptGrades as jest.Mock).mockResolvedValue(
+        submitted,
+      );
 
       const result = await service.submit('uid1', 'a1');
       expect(result.status).toBe(AttemptStatus.COMPLETED);
     });
 
     it('should calculate band scores and call updateAttemptGrades on submission', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
 
       const mockAttemptWithTest = {
         id: 'a1',
@@ -213,9 +242,9 @@ describe('AttemptsService', () => {
         },
       };
 
-      (mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock).mockResolvedValue(
-        mockAttemptWithTest,
-      );
+      (
+        mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock
+      ).mockResolvedValue(mockAttemptWithTest);
       (mockDatasource.updateAttemptGrades as jest.Mock).mockResolvedValue({
         id: 'a1',
         status: AttemptStatus.COMPLETED,
@@ -226,16 +255,26 @@ describe('AttemptsService', () => {
       expect(mockDatasource.updateAttemptGrades).toHaveBeenCalledWith(
         'a1',
         expect.objectContaining({
-          s1: expect.objectContaining({ rawScore: 1, bandScore: expect.any(Number) }),
-          s2: expect.objectContaining({ rawScore: 1, bandScore: expect.any(Number) }),
+          s1: expect.objectContaining({
+            rawScore: 1,
+            bandScore: expect.any(Number),
+          }),
+          s2: expect.objectContaining({
+            rawScore: 1,
+            bandScore: expect.any(Number),
+          }),
         }),
         expect.any(Number),
       );
     });
 
     it('should throw if attempt already submitted', async () => {
-      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({ id: 'u1' });
-      (mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock).mockResolvedValue({
+      (mockDatasource.findUserByFirebaseUid as jest.Mock).mockResolvedValue({
+        id: 'u1',
+      });
+      (
+        mockDatasource.findAttemptByIdWithTestAndQuestions as jest.Mock
+      ).mockResolvedValue({
         id: 'a1',
         userId: 'u1',
         status: AttemptStatus.COMPLETED,

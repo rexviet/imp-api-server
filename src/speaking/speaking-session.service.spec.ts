@@ -58,14 +58,14 @@ describe('SpeakingSessionService', () => {
     it('creates history and delegates seeding to ai service', async () => {
       const attemptId = 'init_1';
       const result = await service.initializeSession(attemptId);
-      
+
       expect(result).toBe('AI Response');
       // AI called with memory mapping
       expect(mockAiService.generateResponse).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ role: 'system' }),
           expect.objectContaining({ role: 'user' }), // The seed
-        ])
+        ]),
       );
     });
   });
@@ -84,18 +84,22 @@ describe('SpeakingSessionService', () => {
     });
   });
 
-
   describe('processTurn', () => {
     it('throws error if session not initialized', async () => {
-      await expect(service.processTurn('invalid_id', 'audio')).rejects.toThrow('Session not initialized');
+      await expect(service.processTurn('invalid_id', 'audio')).rejects.toThrow(
+        'Session not initialized',
+      );
     });
 
     it('processes user audio turn and appends model response', async () => {
       const attemptId = 'attempt_123';
       await service.initializeSession(attemptId); // Seed history
 
-      const { transcript, nextQuestion } = await service.processTurn(attemptId, 'base64');
-      
+      const { transcript, nextQuestion } = await service.processTurn(
+        attemptId,
+        'base64',
+      );
+
       expect(transcript).toBe('User Transcript');
       expect(nextQuestion).toBe('AI Response');
 
@@ -105,7 +109,7 @@ describe('SpeakingSessionService', () => {
         expect.arrayContaining([
           expect.objectContaining({ role: 'model', content: 'AI Response' }),
           expect.objectContaining({ role: 'user', content: 'User Transcript' }),
-        ])
+        ]),
       );
     });
 
@@ -116,7 +120,9 @@ describe('SpeakingSessionService', () => {
       // Mutate STT response
       jest.spyOn(mockSttService, 'transcribeAudio').mockResolvedValueOnce('');
 
-      await expect(service.processTurn(attemptId, 'base64')).rejects.toThrow('Could not transcribe audio');
+      await expect(service.processTurn(attemptId, 'base64')).rejects.toThrow(
+        'Could not transcribe audio',
+      );
     });
   });
 
@@ -124,9 +130,11 @@ describe('SpeakingSessionService', () => {
     it('deletes history mapping', async () => {
       const attemptId = 'kill_me';
       await service.initializeSession(attemptId);
-      
+
       service.endSession(attemptId);
-      await expect(service.processTurn(attemptId, 'base64')).rejects.toThrow('Session not initialized');
+      await expect(service.processTurn(attemptId, 'base64')).rejects.toThrow(
+        'Session not initialized',
+      );
     });
   });
 });
