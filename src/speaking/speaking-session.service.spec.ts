@@ -57,7 +57,7 @@ describe('SpeakingSessionService', () => {
   describe('initializeSession', () => {
     it('creates history and delegates seeding to ai service', async () => {
       const attemptId = 'init_1';
-      const result = await service.initializeSession(attemptId);
+      const result = await service.initializeSession(attemptId, 'q1', 'Part 1 intro');
       
       expect(result).toBe('AI Response');
       // AI called with memory mapping
@@ -92,7 +92,7 @@ describe('SpeakingSessionService', () => {
 
     it('processes user audio turn and appends model response', async () => {
       const attemptId = 'attempt_123';
-      await service.initializeSession(attemptId); // Seed history
+      await service.initializeSession(attemptId, 'q1'); // Seed history
 
       const { transcript, nextQuestion } = await service.processTurn(attemptId, 'base64');
       
@@ -111,7 +111,7 @@ describe('SpeakingSessionService', () => {
 
     it('throws error if STT fails to transcribe', async () => {
       const attemptId = 'attempt_clean';
-      await service.initializeSession(attemptId);
+      await service.initializeSession(attemptId, 'q1');
 
       // Mutate STT response
       jest.spyOn(mockSttService, 'transcribeAudio').mockResolvedValueOnce('');
@@ -123,9 +123,9 @@ describe('SpeakingSessionService', () => {
   describe('endSession', () => {
     it('deletes history mapping', async () => {
       const attemptId = 'kill_me';
-      await service.initializeSession(attemptId);
+      await service.initializeSession(attemptId, 'q1');
       
-      service.endSession(attemptId);
+      await service.endSession(attemptId);
       await expect(service.processTurn(attemptId, 'base64')).rejects.toThrow('Session not initialized');
     });
   });

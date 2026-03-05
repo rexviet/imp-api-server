@@ -30,6 +30,7 @@ export interface IAttemptsDatasource {
     score: number | null,
     detailedAiFeedback?: Record<string, any>,
   ): Promise<UserAttempt>;
+  findAllByUser(userId: string): Promise<any[]>;
 }
 
 export const ATTEMPTS_DATASOURCE = 'ATTEMPTS_DATASOURCE';
@@ -96,6 +97,19 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
     return this.prisma.client.userAttempt.findUnique({
       where: { id: attemptId },
       include: {
+        gradingRequests: {
+          include: {
+            teacher: {
+              include: {
+                user: {
+                  select: {
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         test: {
           include: {
             sections: {
@@ -107,6 +121,7 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
                     id: true,
                     order: true,
                     content: true,
+                    answerKey: true,
                   },
                 },
               },
@@ -168,6 +183,21 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
         } as any,
         score,
       },
+    });
+  }
+
+  async findAllByUser(userId: string): Promise<any[]> {
+    return this.prisma.client.userAttempt.findMany({
+      where: { userId },
+      include: {
+        test: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 }

@@ -44,6 +44,7 @@ describe('API Endpoints (e2e)', () => {
     findAttemptByIdWithTestAndQuestions: jest.fn(),
     updateAttemptAnswers: jest.fn(),
     updateAttemptGrades: jest.fn(),
+    findAllByUser: jest.fn(),
   };
 
   const mockAdminDatasource = {
@@ -345,6 +346,22 @@ describe('API Endpoints (e2e)', () => {
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('Insufficient credits');
+    });
+
+    it('GET /api/v1/attempts - should return list of user attempts', async () => {
+      const mockUser = { id: 'u1' };
+      const mockAttempts = [
+        { id: 'a1', testTitle: 'Test 1', overallScore: 7.0 },
+      ];
+
+      mockAttemptsDatasource.findUserByFirebaseUid.mockResolvedValue(mockUser);
+      mockAttemptsDatasource.findAllByUser.mockResolvedValue(mockAttempts);
+
+      const res = await request(app.getHttpServer()).get('/api/v1/attempts');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual(mockAttempts);
+      expect(mockAttemptsDatasource.findAllByUser).toHaveBeenCalledWith('u1');
     });
 
     it('GET /api/v1/attempts/:id - should return an attempt with test data', async () => {

@@ -56,12 +56,12 @@ describe('SpeakingGateway', () => {
 
   describe('handleJoin', () => {
     it('should join the attempt room and emit examiner-ready via AI session', async () => {
-      const data = { attemptId: 'test-attempt-id' };
+      const data = { attemptId: 'test-attempt-id', questionId: 'q1' };
       
       await gateway.handleJoin(data, mockSocket as Socket);
 
       expect(mockSocket.join).toHaveBeenCalledWith('test-attempt-id');
-      expect(mockSpeakingSessionService.initializeSession).toHaveBeenCalledWith('test-attempt-id', undefined);
+      expect(mockSpeakingSessionService.initializeSession).toHaveBeenCalledWith('test-attempt-id', 'q1', undefined);
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-ready', {
         message: 'Hello from AI',
       });
@@ -94,7 +94,7 @@ describe('SpeakingGateway', () => {
 
   describe('handleDisconnect', () => {
     it('should clean up session if client was joined to an attempt', async () => {
-      const data = { attemptId: 'disc-attempt' };
+      const data = { attemptId: 'disc-attempt', questionId: 'q1' };
       
       // First join to set the mapping
       await gateway.handleJoin(data, mockSocket as Socket);
