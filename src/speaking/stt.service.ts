@@ -34,12 +34,17 @@ export class SttService {
    */
   async transcribeAudio(audioBase64: string): Promise<string> {
     if (!this.client) {
-      this.logger.warn('SpeechClient not initialized, returning fallback string');
+      this.logger.warn(
+        'SpeechClient not initialized, returning fallback string',
+      );
       return 'Mocked Speech-to-Text response due to missing GCP credentials.';
     }
 
     // Strip the Data URL prefix if present (e.g., "data:audio/webm;base64,")
-    const base64Data = audioBase64.replace(/^data:audio\/\w+;(codecs=.*?;)?base64,/, '');
+    const base64Data = audioBase64.replace(
+      /^data:audio\/\w+;(codecs=.*?;)?base64,/,
+      '',
+    );
 
     try {
       const request = {
@@ -56,7 +61,7 @@ export class SttService {
       };
 
       const [response] = await this.client.recognize(request);
-      
+
       const transcript = response.results
         ?.map((result: any) => result.alternatives?.[0]?.transcript)
         .join('\n');
@@ -64,7 +69,7 @@ export class SttService {
       return transcript || '';
     } catch (error) {
       this.logger.error('STT Transcription failed', error.stack);
-      
+
       // Rethrow to be caught by the gateway and emitted as an error event to the client
       throw new Error('STT Transcription failed: ' + error.message);
     }

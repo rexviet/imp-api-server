@@ -10,7 +10,10 @@ export class SpeakingSessionService {
   private readonly logger = new Logger(SpeakingSessionService.name);
 
   // In-memory sessions structure: Map<attemptId, { history: ChatMessage[], questionId: string }>
-  private sessions = new Map<string, { history: ChatMessage[]; questionId: string }>();
+  private sessions = new Map<
+    string,
+    { history: ChatMessage[]; questionId: string }
+  >();
 
   constructor(
     private readonly aiService: AIService,
@@ -58,11 +61,14 @@ export class SpeakingSessionService {
     return this.storageProvider.getPresignedUrl(attempt.masterAudioPath);
   }
 
-
   /**
    * Initializes a session and returns the examiner's opening line.
    */
-  async initializeSession(attemptId: string, questionId: string, questionContext?: string): Promise<string> {
+  async initializeSession(
+    attemptId: string,
+    questionId: string,
+    questionContext?: string,
+  ): Promise<string> {
     const systemPrompt: ChatMessage = {
       role: 'system',
       content: `You are an IELTS Speaking examiner. 
@@ -71,24 +77,32 @@ Keep responses concise, conversational, and under 50 words.
 Ask one question at a time and wait for the student's response.
 
 CURRENT TASK: 
-${questionContext || "Start by welcoming the student to the IELTS speaking test Part 1, ask for their full name, and then proceed to a light introductory question."}
+${
+  questionContext ||
+  'Start by welcoming the student to the IELTS speaking test Part 1, ask for their full name, and then proceed to a light introductory question.'
+}
 
 INSTRUCTION: 
 If this is Part 2 (Cue Card), ask the student to begin their 2-minute talk based on the card. 
-Otherwise, start the conversation naturally based on the task description above.`
+Otherwise, start the conversation naturally based on the task description above.`,
     };
 
     const initialHistory: ChatMessage[] = [
       systemPrompt,
-      { role: 'user', content: '(The student walks in and sits down. Begin the test.)' }
+      {
+        role: 'user',
+        content: '(The student walks in and sits down. Begin the test.)',
+      },
     ];
-    
-    const examinerOpening = await this.aiService.generateResponse(initialHistory);
+
+    const examinerOpening = await this.aiService.generateResponse(
+      initialHistory,
+    );
     initialHistory.push({ role: 'model', content: examinerOpening });
-    
-    this.sessions.set(attemptId, { 
-      history: initialHistory, 
-      questionId 
+
+    this.sessions.set(attemptId, {
+      history: initialHistory,
+      questionId,
     });
 
     return examinerOpening;
@@ -97,7 +111,10 @@ Otherwise, start the conversation naturally based on the task description above.
   /**
    * Processes a turn: Audio -> STT -> LLM -> Reply
    */
-  async processTurn(attemptId: string, audioBase64: string): Promise<{ transcript: string, nextQuestion: string }> {
+  async processTurn(
+    attemptId: string,
+    audioBase64: string,
+  ): Promise<{ transcript: string; nextQuestion: string }> {
     const session = this.sessions.get(attemptId);
     if (!session) {
       this.logger.error(`Attempt ${attemptId} has no active session.`);
@@ -105,8 +122,10 @@ Otherwise, start the conversation naturally based on the task description above.
     }
 
     // 1. Process Audio to Text
-    const studentTranscript = await this.sttService.transcribeAudio(audioBase64);
-    
+    const studentTranscript = await this.sttService.transcribeAudio(
+      audioBase64,
+    );
+
     if (!studentTranscript) {
       throw new Error('Could not transcribe audio (no speech detected)');
     }
@@ -114,13 +133,15 @@ Otherwise, start the conversation naturally based on the task description above.
     session.history.push({ role: 'user', content: studentTranscript });
 
     // 2. Generate Reply using Gemini AI Adapter
-    const examinerReply = await this.aiService.generateResponse(session.history);
-    
+    const examinerReply = await this.aiService.generateResponse(
+      session.history,
+    );
+
     session.history.push({ role: 'model', content: examinerReply });
 
     return {
       transcript: studentTranscript,
-      nextQuestion: examinerReply
+      nextQuestion: examinerReply,
     };
   }
 
@@ -130,23 +151,31 @@ Otherwise, start the conversation naturally based on the task description above.
       try {
         // Persist transcript to the attempt record
         const attempt = await this.prisma.client.userAttempt.findUnique({
-          where: { id: attemptId }
+          where: { id: attemptId },
         });
 
         const currentAnswers = (attempt?.answers as Record<string, any>) || {};
         currentAnswers[session.questionId] = {
           type: 'speaking_transcript',
-          history: session.history.filter(m => m.role !== 'system' && !m.content.includes('(The student walks in'))
+          history: session.history.filter(
+            (m) =>
+              m.role !== 'system' &&
+              !m.content.includes('(The student walks in'),
+          ),
         };
 
         await this.prisma.client.userAttempt.update({
           where: { id: attemptId },
-          data: { answers: currentAnswers }
+          data: { answers: currentAnswers },
         });
 
-        this.logger.log(`Persisted speaking transcript for attempt ${attemptId}, question ${session.questionId}`);
+        this.logger.log(
+          `Persisted speaking transcript for attempt ${attemptId}, question ${session.questionId}`,
+        );
       } catch (err) {
-        this.logger.error(`Failed to persist speaking transcript: ${err.message}`);
+        this.logger.error(
+          `Failed to persist speaking transcript: ${err.message}`,
+        );
       }
       this.sessions.delete(attemptId);
     }

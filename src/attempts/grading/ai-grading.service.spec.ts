@@ -42,9 +42,9 @@ describe('AIGradingService', () => {
       expect(aiService.generateStructuredResponse).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ role: 'system' }),
-          expect.objectContaining({ 
-            role: 'user', 
-            content: expect.stringContaining(taskDescription) 
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining(taskDescription),
           }),
         ]),
         expect.objectContaining({
@@ -70,9 +70,11 @@ describe('AIGradingService', () => {
       expect(aiService.generateStructuredResponse).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ role: 'system' }),
-          expect.objectContaining({ 
-            role: 'user', 
-            content: expect.stringContaining('MODEL: Hello, what is your name?') 
+          expect.objectContaining({
+            role: 'user',
+            content: expect.stringContaining(
+              'MODEL: Hello, what is your name?',
+            ),
           }),
         ]),
         expect.anything(),
@@ -80,7 +82,10 @@ describe('AIGradingService', () => {
       expect(aiService.generateStructuredResponse).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          required: expect.arrayContaining(['fluencyCoherence', 'pronunciation']),
+          required: expect.arrayContaining([
+            'fluencyCoherence',
+            'pronunciation',
+          ]),
         }),
       );
     });

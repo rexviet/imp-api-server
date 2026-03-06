@@ -48,7 +48,9 @@ describe('AIService', () => {
       const mockStream = (async function* () {
         yield 'streamed';
       })();
-      (mockEngine.generateResponseStream as jest.Mock).mockReturnValue(mockStream);
+      (mockEngine.generateResponseStream as jest.Mock).mockReturnValue(
+        mockStream,
+      );
 
       const stream = service.generateResponseStream(messages);
       const chunks = [];
@@ -65,11 +67,16 @@ describe('AIService', () => {
     it('delegates to aiEngine with generic types', async () => {
       const messages: ChatMessage[] = [{ role: 'user', content: 'json' }];
       const schema = { type: 'object' };
-      (mockEngine.generateStructuredResponse as jest.Mock).mockResolvedValue({ key: 'val' });
+      (mockEngine.generateStructuredResponse as jest.Mock).mockResolvedValue({
+        key: 'val',
+      });
 
       const result = await service.generateStructuredResponse(messages, schema);
       expect(result).toEqual({ key: 'val' });
-      expect(mockEngine.generateStructuredResponse).toHaveBeenCalledWith(messages, schema);
+      expect(mockEngine.generateStructuredResponse).toHaveBeenCalledWith(
+        messages,
+        schema,
+      );
     });
   });
 });

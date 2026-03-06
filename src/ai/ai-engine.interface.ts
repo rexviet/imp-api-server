@@ -23,5 +23,8 @@ export interface IAIEngine {
    * @param messages Conversation context
    * @param schema Optional JSON schema for the expected output
    */
-  generateStructuredResponse<T>(messages: ChatMessage[], schema?: any): Promise<T>;
+  generateStructuredResponse<T>(
+    messages: ChatMessage[],
+    schema?: any,
+  ): Promise<T>;
 }

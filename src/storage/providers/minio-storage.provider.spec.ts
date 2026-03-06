@@ -62,14 +62,16 @@ describe('MinioStorageProvider', () => {
   describe('upload', () => {
     it('should upload a file and return StorageFile info', async () => {
       const buffer = Buffer.from('test');
-      const result = await provider.upload(buffer, 'test.txt', { contentType: 'text/plain' });
+      const result = await provider.upload(buffer, 'test.txt', {
+        contentType: 'text/plain',
+      });
 
       expect(mockMinioClient.putObject).toHaveBeenCalledWith(
         'test-bucket',
         'test.txt',
         buffer,
         buffer.length,
-        expect.objectContaining({ 'Content-Type': 'text/plain' })
+        expect.objectContaining({ 'Content-Type': 'text/plain' }),
       );
       expect(result.path).toBe('test.txt');
     });
@@ -79,14 +81,20 @@ describe('MinioStorageProvider', () => {
     it('should download a file and return a Buffer', async () => {
       const result = await provider.download('test.txt');
       expect(result.toString()).toBe('test-content');
-      expect(mockMinioClient.getObject).toHaveBeenCalledWith('test-bucket', 'test.txt');
+      expect(mockMinioClient.getObject).toHaveBeenCalledWith(
+        'test-bucket',
+        'test.txt',
+      );
     });
   });
 
   describe('delete', () => {
     it('should call removeObject', async () => {
       await provider.delete('test.txt');
-      expect(mockMinioClient.removeObject).toHaveBeenCalledWith('test-bucket', 'test.txt');
+      expect(mockMinioClient.removeObject).toHaveBeenCalledWith(
+        'test-bucket',
+        'test.txt',
+      );
     });
   });
 
@@ -94,7 +102,11 @@ describe('MinioStorageProvider', () => {
     it('should generate a GET URL', async () => {
       const url = await provider.getPresignedUrl('test.txt');
       expect(url).toBe('http://presigned-url');
-      expect(mockMinioClient.presignedGetObject).toHaveBeenCalledWith('test-bucket', 'test.txt', 3600);
+      expect(mockMinioClient.presignedGetObject).toHaveBeenCalledWith(
+        'test-bucket',
+        'test.txt',
+        3600,
+      );
     });
   });
 
@@ -102,12 +114,16 @@ describe('MinioStorageProvider', () => {
     it('should generate a PUT URL', async () => {
       const url = await provider.getPresignedUploadUrl('test.txt');
       expect(url).toBe('http://upload-url');
-      expect(mockMinioClient.presignedPutObject).toHaveBeenCalledWith('test-bucket', 'test.txt', 3600);
+      expect(mockMinioClient.presignedPutObject).toHaveBeenCalledWith(
+        'test-bucket',
+        'test.txt',
+        3600,
+      );
     });
   });
 
   describe('onModuleInit', () => {
-    it('should create bucket if it doesn\'t exist', async () => {
+    it("should create bucket if it doesn't exist", async () => {
       mockMinioClient.bucketExists.mockResolvedValue(false);
       await provider.onModuleInit();
       expect(mockMinioClient.makeBucket).toHaveBeenCalledWith('test-bucket');
