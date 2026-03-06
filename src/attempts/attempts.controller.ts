@@ -8,7 +8,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AttemptsService } from './attempts.service';
-import { CreateAttemptDto, UpdateAttemptDto } from './dto/attempt.dto';
+import {
+  CreateAttemptDto,
+  UpdateAttemptDto,
+  BookTeacherReviewDto,
+} from './dto/attempt.dto';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 
@@ -62,5 +66,18 @@ export class AttemptsController {
     @Param('id') id: string,
   ) {
     return this.attemptsService.submit(decodedToken.uid, id);
+  }
+
+  @Post(':id/book-review')
+  async bookTeacherReview(
+    @CurrentUser() decodedToken: DecodedFirebaseToken,
+    @Param('id') id: string,
+    @Body() dto: BookTeacherReviewDto,
+  ) {
+    return this.attemptsService.bookTeacherReview(
+      decodedToken.uid,
+      id,
+      dto.teacherId,
+    );
   }
 }

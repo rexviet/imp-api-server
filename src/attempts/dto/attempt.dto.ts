@@ -10,3 +10,8 @@ export class UpdateAttemptDto {
   @IsObject()
   answers?: Record<string, unknown>;
 }
+
+export class BookTeacherReviewDto {
+  @IsString()
+  teacherId: string;
+}

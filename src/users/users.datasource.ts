@@ -12,6 +12,14 @@ export interface IUsersDatasource {
     role: UserRole;
   }): Promise<User>;
   createTeacherProfile(userId: string): Promise<void>;
+  findTeachers(query?: string): Promise<
+    Array<{
+      id: string;
+      bio: string | null;
+      creditRate: number;
+      user: { id: string; name: string | null; email: string };
+    }>
+  >;
 }
 
 export const USERS_DATASOURCE = 'USERS_DATASOURCE';
@@ -47,6 +55,36 @@ export class PrismaUsersDatasource implements IUsersDatasource {
   async createTeacherProfile(userId: string): Promise<void> {
     await this.prisma.client.teacherProfile.create({
       data: { userId },
+    });
+  }
+
+  async findTeachers(query?: string) {
+    return this.prisma.client.teacherProfile.findMany({
+      where: {
+        user: {
+          role: UserRole.TEACHER,
+          ...(query
+            ? {
+                OR: [
+                  { name: { contains: query, mode: 'insensitive' } },
+                  { email: { contains: query, mode: 'insensitive' } },
+                ],
+              }
+            : {}),
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
   }
 }
