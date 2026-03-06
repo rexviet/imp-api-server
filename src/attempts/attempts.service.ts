@@ -162,7 +162,39 @@ export class AttemptsService {
 
           if (answerKey && typeof answerKey.value === 'string') {
             correctAnswer = answerKey.value;
+            // Direct match
             isCorrect = userAnswer === correctAnswer.trim().toLowerCase();
+
+            // Smart match for MCQs (if seeder has text but student sent letter, or vice versa)
+            if (!isCorrect && (question.content as any)?.options) {
+              const options = (question.content as any).options;
+              if (Array.isArray(options)) {
+                // Check if userAnswer is a letter A/B/C matching the correctAnswer text's index
+                const uIdx =
+                  userAnswer.length === 1
+                    ? userAnswer.toLowerCase().charCodeAt(0) - 97
+                    : -1;
+                const cIdx =
+                  correctAnswer.length === 1
+                    ? correctAnswer.toLowerCase().charCodeAt(0) - 97
+                    : -1;
+
+                if (uIdx >= 0 && uIdx < options.length) {
+                  const optText = String(options[uIdx]).trim().toLowerCase();
+                  if (optText === correctAnswer.trim().toLowerCase()) {
+                    isCorrect = true;
+                  }
+                }
+
+                // Or check if correctAnswer is a letter A/B/C matching the userAnswer text's index
+                if (!isCorrect && cIdx >= 0 && cIdx < options.length) {
+                  const optText = String(options[cIdx]).trim().toLowerCase();
+                  if (optText === userAnswer) {
+                    isCorrect = true;
+                  }
+                }
+              }
+            }
           } else if (answerKey && Array.isArray(answerKey.values)) {
             correctAnswer = answerKey.values.join(' / ');
             isCorrect = answerKey.values.some(
