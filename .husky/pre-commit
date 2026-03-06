@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+set -eu
+
+STAGED_TS_FILES=$(
+  git diff --cached --name-only --diff-filter=ACMR \
+    | grep -E '^(src|apps|libs|test)/.*\.ts$' || true
+)
+
+if [ -z "$STAGED_TS_FILES" ]; then
+  echo "pre-commit: no staged TypeScript files to lint."
+  exit 0
+fi
+
+echo "pre-commit: linting staged TypeScript files..."
+
+# shellcheck disable=SC2086
+npx eslint --fix $STAGED_TS_FILES
+
+echo "$STAGED_TS_FILES" | while IFS= read -r file; do
+  [ -n "$file" ] && git add "$file"
+done
+
+echo "pre-commit: lint complete."

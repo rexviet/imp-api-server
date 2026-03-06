@@ -15,10 +15,7 @@ jest.mock('@google/generative-ai', () => {
             },
           }),
           generateContentStream: jest.fn().mockResolvedValue({
-            stream: [
-              { text: () => 'chunk1 ' },
-              { text: () => 'chunk2' },
-            ],
+            stream: [{ text: () => 'chunk1 ' }, { text: () => 'chunk2' }],
           }),
         }),
       };
@@ -109,7 +106,9 @@ describe('GeminiAdapter', () => {
       adapterAny.getModel = getModelMock;
 
       await expect(
-        adapter.generateStructuredResponse([{ role: 'user' as const, content: 'hi' }]),
+        adapter.generateStructuredResponse([
+          { role: 'user' as const, content: 'hi' },
+        ]),
       ).rejects.toThrow('Invalid JSON format returned from AI');
     });
   });

@@ -8,9 +8,7 @@ import {
 } from '../../common/interfaces/storage-provider.interface';
 
 @Injectable()
-export class MinioStorageProvider
-  implements IStorageProvider, OnModuleInit
-{
+export class MinioStorageProvider implements IStorageProvider, OnModuleInit {
   private readonly client: Minio.Client;
   private readonly bucket: string;
   private readonly logger = new Logger(MinioStorageProvider.name);
@@ -60,7 +58,13 @@ export class MinioStorageProvider
         ...options?.metadata,
       };
 
-      await this.client.putObject(this.bucket, path, file, file.length, metaData);
+      await this.client.putObject(
+        this.bucket,
+        path,
+        file,
+        file.length,
+        metaData,
+      );
 
       this.logger.log(`File uploaded successfully to ${this.bucket}/${path}`);
 
@@ -102,10 +106,7 @@ export class MinioStorageProvider
     }
   }
 
-  async getPresignedUrl(
-    path: string,
-    expiresIn: number = 3600,
-  ): Promise<string> {
+  async getPresignedUrl(path: string, expiresIn = 3600): Promise<string> {
     try {
       return await this.client.presignedGetObject(this.bucket, path, expiresIn);
     } catch (error) {
@@ -116,10 +117,7 @@ export class MinioStorageProvider
     }
   }
 
-  async getPresignedUploadUrl(
-    path: string,
-    expiresIn: number = 3600,
-  ): Promise<string> {
+  async getPresignedUploadUrl(path: string, expiresIn = 3600): Promise<string> {
     try {
       return await this.client.presignedPutObject(this.bucket, path, expiresIn);
     } catch (error) {

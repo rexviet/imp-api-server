@@ -12,33 +12,33 @@ const mockConfig: any = {
       MINIO_USE_SSL: 'false',
     };
     return env[key] || defaultValue;
-  }
+  },
 };
 
 async function verify() {
   const provider = new MinioStorageProvider(mockConfig);
-  
+
   console.log('--- Initializing MinIO Provider ---');
   await provider.onModuleInit();
-  
+
   const testPath = 'test-upload.txt';
   const testBuffer = Buffer.from('Hello IELTS Master Storage');
-  
+
   console.log('--- Uploading test file ---');
   await provider.upload(testBuffer, testPath, { contentType: 'text/plain' });
-  
+
   console.log('--- Checking if file exists ---');
   const exists = await provider.exists(testPath);
   console.log(`Exists: ${exists}`);
-  
+
   console.log('--- Downloading file ---');
   const downloaded = await provider.download(testPath);
   console.log(`Content: ${downloaded.toString()}`);
-  
+
   console.log('--- Generating Presigned URL ---');
   const url = await provider.getPresignedUrl(testPath);
   console.log(`URL: ${url}`);
-  
+
   console.log('--- Verification Complete! ---');
 }
 

@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MockTestsService } from './mock-tests.service';
-import { MOCK_TESTS_DATASOURCE, IMockTestsDatasource } from './mock-tests.datasource';
+import {
+  MOCK_TESTS_DATASOURCE,
+  IMockTestsDatasource,
+} from './mock-tests.datasource';
 import { NotFoundException } from '@nestjs/common';
 
 describe('MockTestsService', () => {
@@ -44,7 +47,9 @@ describe('MockTestsService', () => {
         title: 'Full Test',
         sections: [{ id: 's1', questions: [{ id: 'q1', content: {} }] }],
       };
-      (mockDatasource.findByIdForStudent as jest.Mock).mockResolvedValue(mockTest);
+      (mockDatasource.findByIdForStudent as jest.Mock).mockResolvedValue(
+        mockTest,
+      );
 
       const result = await service.findById('1');
       expect(result).toEqual(mockTest);

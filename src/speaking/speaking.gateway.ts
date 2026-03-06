@@ -41,26 +41,42 @@ export class SpeakingGateway
   }
 
   handleDisconnect(client: Socket) {
-    console.log(`[DISCONNECT] Client disconnected: ${client.id}, Reason: ${client.connected ? 'STILL CONNECTED' : 'CLOSED'}`);
+    console.log(
+      `[DISCONNECT] Client disconnected: ${client.id}, Reason: ${
+        client.connected ? 'STILL CONNECTED' : 'CLOSED'
+      }`,
+    );
     this.logger.log(`Client disconnected: ${client.id}`);
     const attemptId = this.clientToAttemptMap.get(client.id);
     if (attemptId) {
-      this.logger.log(`Cleaning up session for attempt: ${attemptId} after abrupt disconnect`);
+      this.logger.log(
+        `Cleaning up session for attempt: ${attemptId} after abrupt disconnect`,
+      );
       this.speakingSessionService.endSession(attemptId);
       this.clientToAttemptMap.delete(client.id);
     }
   }
 
   @SubscribeMessage('join-speaking-test')
-  async handleJoin(@MessageBody() data: { attemptId: string; questionId: string; questionContext?: string }, @ConnectedSocket() client: Socket) {
-    this.logger.log(`Client ${client.id} joined attempt: ${data.attemptId} for question: ${data.questionId}`);
+  async handleJoin(
+    @MessageBody()
+    data: { attemptId: string; questionId: string; questionContext?: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.logger.log(
+      `Client ${client.id} joined attempt: ${data.attemptId} for question: ${data.questionId}`,
+    );
     client.join(data.attemptId);
     this.clientToAttemptMap.set(client.id, data.attemptId);
-    
+
     try {
       // Initialize Gemini Chat context and get opener
-      const opener = await this.speakingSessionService.initializeSession(data.attemptId, data.questionId, data.questionContext);
-      
+      const opener = await this.speakingSessionService.initializeSession(
+        data.attemptId,
+        data.questionId,
+        data.questionContext,
+      );
+
       client.emit('examiner-ready', {
         message: opener,
       });
@@ -76,28 +92,39 @@ export class SpeakingGateway
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      this.logger.log(`Received audio chunk from ${client.id} for attempt ${data.attemptId}`);
-      
+      this.logger.log(
+        `Received audio chunk from ${client.id} for attempt ${data.attemptId}`,
+      );
+
       if (!data.audio || !data.attemptId) {
-        throw new Error('Invalid data payload (missing audio buffer or attemptId)');
+        throw new Error(
+          'Invalid data payload (missing audio buffer or attemptId)',
+        );
       }
 
       // STT -> LLM Pipeline Turn
-      const reply = await this.speakingSessionService.processTurn(data.attemptId, data.audio);
-      
+      const reply = await this.speakingSessionService.processTurn(
+        data.attemptId,
+        data.audio,
+      );
+
       client.emit('examiner-response', {
         transcript: reply.transcript,
         nextQuestion: reply.nextQuestion,
       });
-      
     } catch (err) {
       this.logger.error(`Error processing audio turn: ${err.message}`);
-      client.emit('error', { message: 'Failed to process audio or generate LLM response' });
+      client.emit('error', {
+        message: 'Failed to process audio or generate LLM response',
+      });
     }
   }
 
   @SubscribeMessage('end-speaking-test')
-  handleEnd(@MessageBody() data: { attemptId: string }, @ConnectedSocket() client: Socket) {
+  handleEnd(
+    @MessageBody() data: { attemptId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
     this.logger.log(`Client ${client.id} ended attempt ${data.attemptId}`);
     this.speakingSessionService.endSession(data.attemptId);
     this.clientToAttemptMap.delete(client.id);
@@ -110,8 +137,12 @@ export class SpeakingGateway
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      this.logger.log(`Client ${client.id} requesting upload URL for attempt ${data.attemptId}`);
-      const uploadUrl = await this.speakingSessionService.createUploadUrl(data.attemptId);
+      this.logger.log(
+        `Client ${client.id} requesting upload URL for attempt ${data.attemptId}`,
+      );
+      const uploadUrl = await this.speakingSessionService.createUploadUrl(
+        data.attemptId,
+      );
       client.emit('upload-url-ready', { uploadUrl });
     } catch (err) {
       this.logger.error(`Error generating upload URL: ${err.message}`);

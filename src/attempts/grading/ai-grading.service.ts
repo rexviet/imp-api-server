@@ -26,9 +26,12 @@ export class AIGradingService {
 
   constructor(private readonly aiService: AIService) {}
 
-  async gradeWriting(taskDescription: string, studentEssay: string): Promise<WritingGrade> {
+  async gradeWriting(
+    taskDescription: string,
+    studentEssay: string,
+  ): Promise<WritingGrade> {
     this.logger.log('Grading Writing attempt...');
-    
+
     const messages: ChatMessage[] = [
       {
         role: 'system',
@@ -59,22 +62,34 @@ Format for each criterion key: { "score": number, "feedback": string }.`,
       properties: {
         taskResponse: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         coherenceCohesion: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         lexicalResource: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         grammaticalRangeAccuracy: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         overallBand: { type: 'number' },
@@ -90,10 +105,15 @@ Format for each criterion key: { "score": number, "feedback": string }.`,
       ],
     };
 
-    return this.aiService.generateStructuredResponse<WritingGrade>(messages, schema);
+    return this.aiService.generateStructuredResponse<WritingGrade>(
+      messages,
+      schema,
+    );
   }
 
-  async gradeSpeaking(transcriptHistory: { role: string; content: string }[]): Promise<SpeakingGrade> {
+  async gradeSpeaking(
+    transcriptHistory: { role: string; content: string }[],
+  ): Promise<SpeakingGrade> {
     this.logger.log('Grading Speaking attempt...');
 
     const transcriptText = transcriptHistory
@@ -128,22 +148,34 @@ Format for each criterion key: { "score": number, "feedback": string }.`,
       properties: {
         fluencyCoherence: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         lexicalResource: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         grammaticalRangeAccuracy: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         pronunciation: {
           type: 'object',
-          properties: { score: { type: 'number' }, feedback: { type: 'string' } },
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' },
+          },
           required: ['score', 'feedback'],
         },
         overallBand: { type: 'number' },
@@ -159,6 +191,9 @@ Format for each criterion key: { "score": number, "feedback": string }.`,
       ],
     };
 
-    return this.aiService.generateStructuredResponse<SpeakingGrade>(messages, schema);
+    return this.aiService.generateStructuredResponse<SpeakingGrade>(
+      messages,
+      schema,
+    );
   }
 }

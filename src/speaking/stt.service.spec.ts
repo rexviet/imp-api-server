@@ -11,10 +11,10 @@ jest.mock('@google-cloud/speech', () => {
           {
             results: [
               {
-                alternatives: [{ transcript: 'Hello examiner.' }]
-              }
-            ]
-          }
+                alternatives: [{ transcript: 'Hello examiner.' }],
+              },
+            ],
+          },
         ]),
       };
     }),
@@ -50,7 +50,9 @@ describe('SttService', () => {
 
   describe('transcribeAudio', () => {
     it('should extract base64 header and return transcript on success', async () => {
-      const result = await service.transcribeAudio('data:audio/webm;base64,AABBCC');
+      const result = await service.transcribeAudio(
+        'data:audio/webm;base64,AABBCC',
+      );
       expect(result).toBe('Hello examiner.');
     });
 
@@ -70,9 +72,13 @@ describe('SttService', () => {
     it('should catch errors cleanly and rethrow', async () => {
       // Temporarily break recognize method
       const serviceAny = service as any;
-      serviceAny.client.recognize = jest.fn().mockRejectedValue(new Error('GCP Error'));
+      serviceAny.client.recognize = jest
+        .fn()
+        .mockRejectedValue(new Error('GCP Error'));
 
-      await expect(service.transcribeAudio('base64')).rejects.toThrow('STT Transcription failed: GCP Error');
+      await expect(service.transcribeAudio('base64')).rejects.toThrow(
+        'STT Transcription failed: GCP Error',
+      );
     });
   });
 });

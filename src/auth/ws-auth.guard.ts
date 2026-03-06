@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, Logger } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { FirebaseService } from '../firebase/firebase.service';
 import { WsException } from '@nestjs/websockets';
 
@@ -11,7 +16,9 @@ export class WsAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     try {
       const client = context.switchToWs().getClient();
-      const token = client.handshake?.auth?.token || client.handshake?.headers?.authorization?.split('Bearer ')[1];
+      const token =
+        client.handshake?.auth?.token ||
+        client.handshake?.headers?.authorization?.split('Bearer ')[1];
 
       if (!token) {
         this.logger.error('No token provided for WebSocket connection');
