@@ -37,4 +37,8 @@ export class UsersService {
   async getCurrentUser(firebaseUid: string) {
     return this.datasource.findByFirebaseUidWithProfile(firebaseUid);
   }
+
+  async findTeachers(query?: string) {
+    return this.datasource.findTeachers(query);
+  }
 }

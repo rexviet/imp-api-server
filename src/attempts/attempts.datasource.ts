@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AttemptStatus,
+  GradingStatus,
   TransactionType,
   User,
   UserAttempt,
@@ -31,6 +32,11 @@ export interface IAttemptsDatasource {
     detailedAiFeedback?: Record<string, any>,
   ): Promise<UserAttempt>;
   findAllByUser(userId: string): Promise<any[]>;
+  createGradingRequestWithCreditTransfer(
+    firebaseUid: string,
+    attemptId: string,
+    teacherProfileId: string,
+  ): Promise<any>;
 }
 
 export const ATTEMPTS_DATASOURCE = 'ATTEMPTS_DATASOURCE';
@@ -198,6 +204,93 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
         },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createGradingRequestWithCreditTransfer(
+    firebaseUid: string,
+    attemptId: string,
+    teacherProfileId: string,
+  ): Promise<any> {
+    return this.prisma.client.$transaction(async (tx) => {
+      const student = await tx.user.findUnique({
+        where: { firebaseUid },
+      });
+      if (!student) throw new Error('User not found in transaction');
+
+      const attempt = await tx.userAttempt.findFirst({
+        where: { id: attemptId, userId: student.id },
+        include: { test: { select: { title: true } } },
+      });
+      if (!attempt) throw new Error('ATTEMPT_NOT_FOUND_OR_FORBIDDEN');
+      if (attempt.status === AttemptStatus.IN_PROGRESS) {
+        throw new Error('ATTEMPT_NOT_COMPLETED');
+      }
+
+      const teacherProfile = await tx.teacherProfile.findUnique({
+        where: { id: teacherProfileId },
+        include: { user: { select: { id: true, name: true, email: true } } },
+      });
+      if (!teacherProfile) throw new Error('TEACHER_NOT_FOUND');
+
+      const existingPendingRequest = await tx.gradingRequest.findFirst({
+        where: {
+          attemptId,
+          teacherId: teacherProfileId,
+          status: GradingStatus.PENDING,
+        },
+      });
+      if (existingPendingRequest) throw new Error('GRADING_REQUEST_EXISTS');
+
+      const cost = teacherProfile.creditRate;
+      if (student.creditBalance < cost) {
+        throw new Error(
+          `INSUFFICIENT_CREDITS:${cost}:${student.creditBalance}`,
+        );
+      }
+
+      await tx.user.update({
+        where: { id: student.id },
+        data: { creditBalance: { decrement: cost } },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: student.id,
+          amount: -cost,
+          type: TransactionType.SPEND,
+          description: `Teacher review booking for "${attempt.test.title}"`,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: teacherProfile.user.id },
+        data: { creditBalance: { increment: cost } },
+      });
+      await tx.transaction.create({
+        data: {
+          userId: teacherProfile.user.id,
+          amount: cost,
+          type: TransactionType.EARN,
+          description: `Review booking income for "${attempt.test.title}"`,
+        },
+      });
+
+      return tx.gradingRequest.create({
+        data: {
+          attemptId,
+          teacherId: teacherProfileId,
+          status: GradingStatus.PENDING,
+        },
+        include: {
+          teacher: {
+            include: {
+              user: {
+                select: { id: true, name: true, email: true },
+              },
+            },
+          },
+        },
+      });
     });
   }
 }

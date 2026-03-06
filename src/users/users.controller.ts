@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Query } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
@@ -28,5 +28,10 @@ export class UsersController {
   @Get('me')
   async getMe(@CurrentUser() decodedToken: any) {
     return this.usersService.getCurrentUser(decodedToken.uid);
+  }
+
+  @Get('teachers')
+  async findTeachers(@Query('q') query?: string) {
+    return this.usersService.findTeachers(query);
   }
 }

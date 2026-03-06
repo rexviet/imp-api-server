@@ -92,9 +92,13 @@ export class AttemptsService {
     // Generate Presigned URL for master audio if it exists
     if (attempt.masterAudioPath) {
       try {
-        (attempt as any).masterAudioUrl = await this.storageProvider.getPresignedUrl(attempt.masterAudioPath);
+        (attempt as any).masterAudioUrl =
+          await this.storageProvider.getPresignedUrl(attempt.masterAudioPath);
       } catch (err) {
-        console.error('Failed to generate presigned URL for attempt master audio:', err);
+        console.error(
+          'Failed to generate presigned URL for attempt master audio:',
+          err,
+        );
       }
     }
 
@@ -124,8 +128,9 @@ export class AttemptsService {
   async submit(firebaseUid: string, attemptId: string) {
     const user = await this.resolveUser(firebaseUid);
 
-    const attempt =
-      await this.datasource.findAttemptByIdWithTestAndQuestions(attemptId);
+    const attempt = await this.datasource.findAttemptByIdWithTestAndQuestions(
+      attemptId,
+    );
 
     if (!attempt)
       throw new NotFoundException(`Attempt "${attemptId}" not found`);
@@ -219,26 +224,33 @@ export class AttemptsService {
         bandSums += band;
         gradedSectionsCount++;
         results[section.id] = sectionDetails;
-      } 
-      else if (section.type === 'WRITING') {
-        let sectionBandSum = 0;
+      } else if (section.type === 'WRITING') {
+        const sectionBandSum = 0;
         let essayCount = 0;
 
         for (const question of section.questions) {
           const studentEssay = answers[question.id];
-          if (studentEssay && typeof studentEssay === 'string' && studentEssay.length > 10) {
+          if (
+            studentEssay &&
+            typeof studentEssay === 'string' &&
+            studentEssay.length > 10
+          ) {
             const taskText = (question.content as any).text;
-            
-            const gradePromise = this.aiGradingService.gradeWriting(taskText, studentEssay)
-              .then(grade => {
+
+            const gradePromise = this.aiGradingService
+              .gradeWriting(taskText, studentEssay)
+              .then((grade) => {
                 aiGrades[question.id] = grade;
                 return grade.overallBand;
               })
-              .catch(err => {
-                console.error(`AI Grading failed for writing question ${question.id}:`, err);
+              .catch((err) => {
+                console.error(
+                  `AI Grading failed for writing question ${question.id}:`,
+                  err,
+                );
                 return null;
               });
-            
+
             aiGradingPromises.push(gradePromise);
             essayCount++;
           }
@@ -246,18 +258,21 @@ export class AttemptsService {
 
         sectionDetails.status = 'AI_GRADING_IN_PROGRESS';
         results[section.id] = sectionDetails;
-      }
-      else if (section.type === 'SPEAKING') {
+      } else if (section.type === 'SPEAKING') {
         for (const question of section.questions) {
           const transcriptData = answers[question.id];
           if (transcriptData && transcriptData.type === 'speaking_transcript') {
-            const gradePromise = this.aiGradingService.gradeSpeaking(transcriptData.history)
-              .then(grade => {
+            const gradePromise = this.aiGradingService
+              .gradeSpeaking(transcriptData.history)
+              .then((grade) => {
                 aiGrades[question.id] = grade;
                 return grade.overallBand;
               })
-              .catch(err => {
-                console.error(`AI Grading failed for speaking question ${question.id}:`, err);
+              .catch((err) => {
+                console.error(
+                  `AI Grading failed for speaking question ${question.id}:`,
+                  err,
+                );
                 return null;
               });
 
@@ -271,9 +286,9 @@ export class AttemptsService {
 
     // Wait for all AI grading to finish
     const aiResults = await Promise.all(aiGradingPromises);
-    
+
     // Aggregate Writing/Speaking scores into overall band
-    aiResults.forEach(score => {
+    aiResults.forEach((score) => {
       if (score !== null) {
         bandSums += score;
         gradedSectionsCount++;
@@ -306,6 +321,54 @@ export class AttemptsService {
         : null;
 
     // Save detailed AI feedback and final results
-    return this.datasource.updateAttemptGrades(attemptId, results, overallScore, aiGrades);
+    return this.datasource.updateAttemptGrades(
+      attemptId,
+      results,
+      overallScore,
+      aiGrades,
+    );
+  }
+
+  async bookTeacherReview(
+    firebaseUid: string,
+    attemptId: string,
+    teacherId: string,
+  ) {
+    await this.resolveUser(firebaseUid);
+
+    try {
+      return await this.datasource.createGradingRequestWithCreditTransfer(
+        firebaseUid,
+        attemptId,
+        teacherId,
+      );
+    } catch (err) {
+      if (err.message?.startsWith('INSUFFICIENT_CREDITS:')) {
+        const [, needed, have] = err.message.split(':');
+        throw new BadRequestException(
+          `Insufficient credits. You need ${needed} credits but have ${have}.`,
+        );
+      }
+      if (err.message === 'ATTEMPT_NOT_FOUND_OR_FORBIDDEN') {
+        throw new NotFoundException('Attempt not found for current user');
+      }
+      if (err.message === 'ATTEMPT_NOT_COMPLETED') {
+        throw new BadRequestException(
+          'You can only book teacher review for completed attempts',
+        );
+      }
+      if (err.message === 'TEACHER_NOT_FOUND') {
+        throw new NotFoundException('Teacher not found');
+      }
+      if (err.message === 'GRADING_REQUEST_EXISTS') {
+        throw new BadRequestException(
+          'You already have a pending review request for this teacher',
+        );
+      }
+      if (err.message === 'User not found in transaction') {
+        throw new NotFoundException('User not found');
+      }
+      throw err;
+    }
   }
 }

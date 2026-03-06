@@ -12,6 +12,7 @@ describe('UsersService', () => {
     findByFirebaseUidWithProfile: jest.fn(),
     create: jest.fn(),
     createTeacherProfile: jest.fn(),
+    findTeachers: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -95,10 +96,14 @@ describe('UsersService', () => {
       email: 'test@test.com',
       teacherProfile: null,
     };
-    (mockDatasource.findByFirebaseUidWithProfile as jest.Mock).mockResolvedValue(mockUser);
+    (
+      mockDatasource.findByFirebaseUidWithProfile as jest.Mock
+    ).mockResolvedValue(mockUser);
 
     const result = await service.getCurrentUser('uid1');
     expect(result).toEqual(mockUser);
-    expect(mockDatasource.findByFirebaseUidWithProfile).toHaveBeenCalledWith('uid1');
+    expect(mockDatasource.findByFirebaseUidWithProfile).toHaveBeenCalledWith(
+      'uid1',
+    );
   });
 });
