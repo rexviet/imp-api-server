@@ -14,6 +14,7 @@ describe('AttemptsController', () => {
     updateAnswers: jest.fn(),
     submit: jest.fn(),
     findAllForUser: jest.fn(),
+    bookTeacherReview: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -76,5 +77,22 @@ describe('AttemptsController', () => {
     const result = await controller.submit(token, 'a1');
     expect(result.status).toBe('COMPLETED');
     expect(service.submit).toHaveBeenCalledWith('uid1', 'a1');
+  });
+
+  it('should create teacher review booking', async () => {
+    const token = { uid: 'uid1' };
+    const dto = { teacherId: 'tp1', targetSectionType: 'SPEAKING' as const };
+    const result = { id: 'gr1', status: 'PENDING' };
+    mockService.bookTeacherReview.mockResolvedValue(result);
+
+    expect(await controller.bookTeacherReview(token, 'a1', dto)).toEqual(
+      result,
+    );
+    expect(service.bookTeacherReview).toHaveBeenCalledWith(
+      'uid1',
+      'a1',
+      'tp1',
+      'SPEAKING',
+    );
   });
 });

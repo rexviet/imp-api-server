@@ -78,6 +78,7 @@ export class AttemptsController {
       decodedToken.uid,
       id,
       dto.teacherId,
+      dto.targetSectionType,
     );
   }
 }

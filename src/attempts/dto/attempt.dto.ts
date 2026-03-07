@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class CreateAttemptDto {
   @IsString()
@@ -14,4 +14,8 @@ export class UpdateAttemptDto {
 export class BookTeacherReviewDto {
   @IsString()
   teacherId: string;
+
+  @IsString()
+  @IsIn(['WRITING', 'SPEAKING'])
+  targetSectionType: 'WRITING' | 'SPEAKING';
 }

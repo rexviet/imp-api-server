@@ -448,11 +448,16 @@ describe('AttemptsService', () => {
         mockDatasource.createGradingRequestWithCreditTransfer as jest.Mock
       ).mockResolvedValue(request);
 
-      const result = await service.bookTeacherReview('uid1', 'a1', 't1');
+      const result = await service.bookTeacherReview(
+        'uid1',
+        'a1',
+        't1',
+        'WRITING',
+      );
       expect(result).toEqual(request);
       expect(
         mockDatasource.createGradingRequestWithCreditTransfer,
-      ).toHaveBeenCalledWith('uid1', 'a1', 't1');
+      ).toHaveBeenCalledWith('uid1', 'a1', 't1', 'WRITING');
     });
 
     it('should throw BadRequestException when credits are insufficient', async () => {
@@ -464,7 +469,7 @@ describe('AttemptsService', () => {
       ).mockRejectedValue(new Error('INSUFFICIENT_CREDITS:50:10'));
 
       await expect(
-        service.bookTeacherReview('uid1', 'a1', 't1'),
+        service.bookTeacherReview('uid1', 'a1', 't1', 'SPEAKING'),
       ).rejects.toThrow(BadRequestException);
     });
   });

@@ -29,7 +29,8 @@ export class TeacherGradingService {
     const teacher = await this.resolveTeacher(firebaseUid);
     const requests = await this.datasource.findRequestsByTeacher(teacher.id);
 
-    return requests.map((request) => ({
+    return requests.map((request: TeacherQueueRequest) => ({
+      targetSectionType: request.targetSectionType,
       id: request.id,
       status: request.status,
       createdAt: request.createdAt,
@@ -50,7 +51,9 @@ export class TeacherGradingService {
         test: {
           id: request.attempt.test.id,
           title: request.attempt.test.title,
-          sectionTypes: request.attempt.test.sections.map((s: any) => s.type),
+          sectionTypes: request.attempt.test.sections.map(
+            (section) => section.type,
+          ),
         },
       },
     }));
@@ -128,3 +131,33 @@ export class TeacherGradingService {
     }
   }
 }
+
+type TeacherQueueRequest = {
+  id: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  feedback: string | null;
+  finalScore: number | null;
+  rubric: Record<string, unknown> | null;
+  targetSectionType: 'WRITING' | 'SPEAKING';
+  attempt: {
+    id: string;
+    status: string;
+    score: number | null;
+    createdAt: Date;
+    user: {
+      id: string;
+      name: string | null;
+      email: string;
+    };
+    test: {
+      id: string;
+      title: string;
+      sections: Array<{
+        id: string;
+        type: 'LISTENING' | 'READING' | 'WRITING' | 'SPEAKING';
+      }>;
+    };
+  };
+};

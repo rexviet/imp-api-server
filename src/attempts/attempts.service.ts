@@ -333,6 +333,7 @@ export class AttemptsService {
     firebaseUid: string,
     attemptId: string,
     teacherId: string,
+    targetSectionType: 'WRITING' | 'SPEAKING',
   ) {
     await this.resolveUser(firebaseUid);
 
@@ -341,6 +342,7 @@ export class AttemptsService {
         firebaseUid,
         attemptId,
         teacherId,
+        targetSectionType,
       );
     } catch (err) {
       if (err.message?.startsWith('INSUFFICIENT_CREDITS:')) {

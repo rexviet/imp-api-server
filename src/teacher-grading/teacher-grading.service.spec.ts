@@ -50,6 +50,7 @@ describe('TeacherGradingService', () => {
       {
         id: 'gr-1',
         status: GradingStatus.PENDING,
+        targetSectionType: 'WRITING',
         createdAt: new Date(),
         updatedAt: new Date(),
         feedback: null,
@@ -73,6 +74,7 @@ describe('TeacherGradingService', () => {
     const result = await service.listRequests('firebase-teacher');
     expect(result).toHaveLength(1);
     expect(result[0].attempt.candidate.name).toBe('Student A');
+    expect(result[0].targetSectionType).toBe('WRITING');
   });
 
   it('should add signed audio URL in detail response when path exists', async () => {
