@@ -18,9 +18,8 @@ export class SaveGradingDraftDto {
 }
 
 export class SubmitGradingDto extends SaveGradingDraftDto {
-  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(9)
-  finalScore?: number;
+  finalScore: number;
 }

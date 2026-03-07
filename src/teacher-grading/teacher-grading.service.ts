@@ -117,7 +117,7 @@ export class TeacherGradingService {
     dto: {
       feedback?: string;
       rubric?: Record<string, unknown>;
-      finalScore?: number;
+      finalScore: number;
     },
   ) {
     const teacher = await this.resolveTeacher(firebaseUid);
