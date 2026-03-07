@@ -60,6 +60,7 @@ describe('TeacherGradingService', () => {
           status: 'COMPLETED',
           score: 6.5,
           createdAt: new Date(),
+          masterAudioPath: null,
           user: { id: 's-1', name: 'Student A', email: 'a@example.com' },
           test: {
             id: 't-1',
@@ -73,6 +74,47 @@ describe('TeacherGradingService', () => {
     const result = await service.listRequests('firebase-teacher');
     expect(result).toHaveLength(1);
     expect(result[0].attempt.candidate.name).toBe('Student A');
+    expect(result[0].targetSectionType).toBe('WRITING');
+  });
+
+  it('should infer SPEAKING target type when attempt includes speaking audio', async () => {
+    (
+      mockDatasource.findTeacherProfileByFirebaseUid as jest.Mock
+    ).mockResolvedValue({
+      id: 'tp-1',
+      user: { id: 'u-1', role: UserRole.TEACHER },
+    });
+    (mockDatasource.findRequestsByTeacher as jest.Mock).mockResolvedValue([
+      {
+        id: 'gr-2',
+        status: GradingStatus.PENDING,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        feedback: null,
+        finalScore: null,
+        rubric: null,
+        attempt: {
+          id: 'a-2',
+          status: 'COMPLETED',
+          score: 6.5,
+          createdAt: new Date(),
+          masterAudioPath: 'speaking/a-2.webm',
+          user: { id: 's-2', name: 'Student B', email: 'b@example.com' },
+          test: {
+            id: 't-2',
+            title: 'Mock 2',
+            sections: [
+              { id: 'sec-1', type: 'WRITING' },
+              { id: 'sec-2', type: 'SPEAKING' },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const result = await service.listRequests('firebase-teacher');
+    expect(result).toHaveLength(1);
+    expect(result[0].targetSectionType).toBe('SPEAKING');
   });
 
   it('should add signed audio URL in detail response when path exists', async () => {

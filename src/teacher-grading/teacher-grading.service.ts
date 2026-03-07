@@ -30,6 +30,7 @@ export class TeacherGradingService {
     const requests = await this.datasource.findRequestsByTeacher(teacher.id);
 
     return requests.map((request) => ({
+      targetSectionType: this.resolveTargetSectionType(request),
       id: request.id,
       status: request.status,
       createdAt: request.createdAt,
@@ -54,6 +55,21 @@ export class TeacherGradingService {
         },
       },
     }));
+  }
+
+  private resolveTargetSectionType(request: any): 'WRITING' | 'SPEAKING' {
+    const sectionTypes = new Set(
+      request.attempt.test.sections.map((s: any) => s.type),
+    );
+
+    if (sectionTypes.has('WRITING') && !sectionTypes.has('SPEAKING')) {
+      return 'WRITING';
+    }
+    if (sectionTypes.has('SPEAKING') && !sectionTypes.has('WRITING')) {
+      return 'SPEAKING';
+    }
+
+    return request.attempt.masterAudioPath ? 'SPEAKING' : 'WRITING';
   }
 
   async getRequestDetail(firebaseUid: string, requestId: string) {
