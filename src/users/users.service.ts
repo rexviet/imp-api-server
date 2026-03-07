@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { IUsersDatasource, USERS_DATASOURCE } from './users.datasource';
 
@@ -57,10 +52,6 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.role !== UserRole.TEACHER) {
-      throw new ForbiddenException('Only TEACHER accounts can update profile');
-    }
-
     await this.datasource.upsertTeacherProfile(user.id, data);
     return this.datasource.findByFirebaseUidWithProfile(firebaseUid);
   }

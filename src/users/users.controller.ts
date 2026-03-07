@@ -7,11 +7,14 @@ import {
   Query,
   Patch,
 } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { UsersService } from './users.service';
 import { RegisterUserDto } from './dto/register-user.dto';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { UpdateTeacherProfileDto } from './dto/update-teacher-profile.dto';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 
 @Controller('users')
 @UseGuards(FirebaseAuthGuard)
@@ -45,6 +48,8 @@ export class UsersController {
   }
 
   @Patch('me/teacher-profile')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.TEACHER)
   async updateTeacherProfile(
     @CurrentUser() decodedToken: any,
     @Body() dto: UpdateTeacherProfileDto,

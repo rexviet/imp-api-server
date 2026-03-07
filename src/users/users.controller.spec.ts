@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '@prisma/client';
 import { ExecutionContext } from '@nestjs/common';
 
@@ -28,6 +29,8 @@ describe('UsersController', () => {
     })
       .overrideGuard(FirebaseAuthGuard)
       .useValue(mockFirebaseAuthGuard)
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: (_context: ExecutionContext) => true })
       .compile();
 
     controller = module.get<UsersController>(UsersController);
