@@ -36,6 +36,7 @@ export interface IAttemptsDatasource {
     firebaseUid: string,
     attemptId: string,
     teacherProfileId: string,
+    targetSectionType: 'WRITING' | 'SPEAKING',
   ): Promise<any>;
 }
 
@@ -211,6 +212,7 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
     firebaseUid: string,
     attemptId: string,
     teacherProfileId: string,
+    targetSectionType: 'WRITING' | 'SPEAKING',
   ): Promise<any> {
     return this.prisma.client.$transaction(async (tx) => {
       const student = await tx.user.findUnique({
@@ -279,6 +281,7 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
         data: {
           attemptId,
           teacherId: teacherProfileId,
+          targetSectionType,
           status: GradingStatus.PENDING,
         },
         include: {

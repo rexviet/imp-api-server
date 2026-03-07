@@ -39,6 +39,11 @@ enum GradingStatus {
   COMPLETED
 }
 
+enum GradingTargetSection {
+  WRITING
+  SPEAKING
+}
+
 enum SectionType {
   LISTENING
   READING
@@ -142,6 +147,7 @@ model GradingRequest {
   attempt     UserAttempt   @relation(fields: [attemptId], references: [id])
   teacherId   String
   teacher     TeacherProfile @relation(fields: [teacherId], references: [id])
+  targetSectionType GradingTargetSection
   status      GradingStatus @default(PENDING)
   feedback    String?       // Rich text or plain feedback
   rubric      Json?         // Criterion scores and grading metadata
