@@ -1,10 +1,5 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { GradingStatus, UserRole } from '@prisma/client';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { GradingStatus } from '@prisma/client';
 import {
   ITeacherGradingDatasource,
   TEACHER_GRADING_DATASOURCE,
@@ -26,9 +21,6 @@ export class TeacherGradingService {
     );
     if (!teacher) {
       throw new NotFoundException('Teacher profile not found');
-    }
-    if (teacher.user.role !== UserRole.TEACHER) {
-      throw new ForbiddenException('Only TEACHER accounts can access grading');
     }
     return teacher;
   }

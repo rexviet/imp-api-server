@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ExecutionContext } from '@nestjs/common';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
 import { TeacherGradingController } from './teacher-grading.controller';
 import { TeacherGradingService } from './teacher-grading.service';
 
@@ -22,6 +23,8 @@ describe('TeacherGradingController', () => {
       providers: [{ provide: TeacherGradingService, useValue: mockService }],
     })
       .overrideGuard(FirebaseAuthGuard)
+      .useValue({ canActivate: (_ctx: ExecutionContext) => true })
+      .overrideGuard(RolesGuard)
       .useValue({ canActivate: (_ctx: ExecutionContext) => true })
       .compile();
 

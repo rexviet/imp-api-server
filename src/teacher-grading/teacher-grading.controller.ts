@@ -7,8 +7,11 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { Roles } from '../auth/roles.decorator';
+import { RolesGuard } from '../auth/roles.guard';
 import { TeacherGradingService } from './teacher-grading.service';
 import {
   SaveGradingDraftDto,
@@ -20,7 +23,8 @@ interface DecodedFirebaseToken {
 }
 
 @Controller('teacher/grading-requests')
-@UseGuards(FirebaseAuthGuard)
+@UseGuards(FirebaseAuthGuard, RolesGuard)
+@Roles(UserRole.TEACHER)
 export class TeacherGradingController {
   constructor(private readonly teacherGradingService: TeacherGradingService) {}
 
