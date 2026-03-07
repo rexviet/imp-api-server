@@ -35,6 +35,7 @@ enum TransactionType {
 
 enum GradingStatus {
   PENDING
+  IN_PROGRESS
   COMPLETED
 }
 
@@ -64,6 +65,7 @@ model TeacherProfile {
   id          String   @id @default(uuid())
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id])
+  headline    String?
   bio         String?
   creditRate  Int      @default(5) // Credits per grading
   createdAt     DateTime  @default(now())
@@ -142,6 +144,7 @@ model GradingRequest {
   teacher     TeacherProfile @relation(fields: [teacherId], references: [id])
   status      GradingStatus @default(PENDING)
   feedback    String?       // Rich text or plain feedback
+  rubric      Json?         // Criterion scores and grading metadata
   finalScore  Float?        // Human-revised band score
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt

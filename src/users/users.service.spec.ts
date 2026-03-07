@@ -12,6 +12,7 @@ describe('UsersService', () => {
     findByFirebaseUidWithProfile: jest.fn(),
     create: jest.fn(),
     createTeacherProfile: jest.fn(),
+    upsertTeacherProfile: jest.fn(),
     findTeachers: jest.fn(),
   };
 
@@ -104,6 +105,49 @@ describe('UsersService', () => {
     expect(result).toEqual(mockUser);
     expect(mockDatasource.findByFirebaseUidWithProfile).toHaveBeenCalledWith(
       'uid1',
+    );
+  });
+
+  it('should update teacher profile for teacher user', async () => {
+    const teacherUser = {
+      id: 'u-teacher',
+      firebaseUid: 'uid-teacher',
+      email: 'teacher@example.com',
+      role: UserRole.TEACHER,
+      teacherProfile: { id: 'tp-1', creditRate: 5, bio: null, headline: null },
+    };
+
+    (mockDatasource.findByFirebaseUidWithProfile as jest.Mock)
+      .mockResolvedValueOnce(teacherUser)
+      .mockResolvedValueOnce({
+        ...teacherUser,
+        teacherProfile: {
+          id: 'tp-1',
+          creditRate: 120,
+          bio: 'Updated bio',
+          headline: 'IELTS Examiner',
+        },
+      });
+    (mockDatasource.upsertTeacherProfile as jest.Mock).mockResolvedValue({
+      id: 'tp-1',
+    });
+
+    await service.updateTeacherProfile('uid-teacher', {
+      bio: 'Updated bio',
+      headline: 'IELTS Examiner',
+      creditRate: 120,
+    });
+
+    expect(mockDatasource.upsertTeacherProfile).toHaveBeenCalledWith(
+      'u-teacher',
+      {
+        bio: 'Updated bio',
+        headline: 'IELTS Examiner',
+        creditRate: 120,
+      },
+    );
+    expect(mockDatasource.findByFirebaseUidWithProfile).toHaveBeenCalledTimes(
+      2,
     );
   });
 });

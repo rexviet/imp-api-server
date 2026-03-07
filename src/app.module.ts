@@ -12,6 +12,7 @@ import { AttemptsModule } from './attempts/attempts.module';
 import { SpeakingModule } from './speaking/speaking.module';
 import { AIModule } from './ai/ai.module';
 import { StorageModule } from './storage/storage.module';
+import { TeacherGradingModule } from './teacher-grading/teacher-grading.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { StorageModule } from './storage/storage.module';
     SpeakingModule,
     AIModule,
     StorageModule,
+    TeacherGradingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

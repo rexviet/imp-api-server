@@ -12,6 +12,8 @@ describe('UsersController', () => {
   const mockUsersService = {
     findOrCreateUser: jest.fn(),
     getCurrentUser: jest.fn(),
+    findTeachers: jest.fn(),
+    updateTeacherProfile: jest.fn(),
   };
 
   const mockFirebaseAuthGuard = {
@@ -62,5 +64,24 @@ describe('UsersController', () => {
     const result = await controller.getMe(mockToken);
     expect(result).toEqual(expectedResult);
     expect(service.getCurrentUser).toHaveBeenCalledWith('uid2');
+  });
+
+  it('should update teacher profile for current user', async () => {
+    const mockToken = { uid: 'uid-teacher' };
+    const mockDto = {
+      headline: 'IELTS Examiner',
+      bio: 'Updated bio',
+      creditRate: 120,
+    };
+    const expectedResult = { id: 'u-teacher', role: UserRole.TEACHER };
+
+    mockUsersService.updateTeacherProfile.mockResolvedValue(expectedResult);
+
+    const result = await controller.updateTeacherProfile(mockToken, mockDto);
+    expect(result).toEqual(expectedResult);
+    expect(service.updateTeacherProfile).toHaveBeenCalledWith(
+      'uid-teacher',
+      mockDto,
+    );
   });
 });
