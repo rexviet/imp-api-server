@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 import { IUsersDatasource, USERS_DATASOURCE } from './users.datasource';
 
@@ -40,5 +40,19 @@ export class UsersService {
 
   async findTeachers(query?: string) {
     return this.datasource.findTeachers(query);
+  }
+
+  async updateTeacherProfile(
+    firebaseUid: string,
+    data: { headline?: string; bio?: string; creditRate?: number },
+  ) {
+    const user = await this.datasource.findByFirebaseUidWithProfile(
+      firebaseUid,
+    );
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    await this.datasource.upsertTeacherProfile(user.id, data);
+    return this.datasource.findByFirebaseUidWithProfile(firebaseUid);
   }
 }

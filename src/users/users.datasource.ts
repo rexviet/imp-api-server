@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { User, UserRole } from '@prisma/client';
+import { TeacherProfile, User, UserRole } from '@prisma/client';
 
 export interface IUsersDatasource {
   findByFirebaseUid(firebaseUid: string): Promise<User | null>;
@@ -12,6 +12,10 @@ export interface IUsersDatasource {
     role: UserRole;
   }): Promise<User>;
   createTeacherProfile(userId: string): Promise<void>;
+  upsertTeacherProfile(
+    userId: string,
+    data: { headline?: string; bio?: string; creditRate?: number },
+  ): Promise<TeacherProfile>;
   findTeachers(query?: string): Promise<
     Array<{
       id: string;
@@ -55,6 +59,28 @@ export class PrismaUsersDatasource implements IUsersDatasource {
   async createTeacherProfile(userId: string): Promise<void> {
     await this.prisma.client.teacherProfile.create({
       data: { userId },
+    });
+  }
+
+  async upsertTeacherProfile(
+    userId: string,
+    data: { headline?: string; bio?: string; creditRate?: number },
+  ): Promise<TeacherProfile> {
+    return this.prisma.client.teacherProfile.upsert({
+      where: { userId },
+      update: {
+        ...(data.headline !== undefined ? { headline: data.headline } : {}),
+        ...(data.bio !== undefined ? { bio: data.bio } : {}),
+        ...(data.creditRate !== undefined
+          ? { creditRate: data.creditRate }
+          : {}),
+      },
+      create: {
+        userId,
+        headline: data.headline ?? null,
+        bio: data.bio ?? null,
+        creditRate: data.creditRate ?? 5,
+      },
     });
   }
 
