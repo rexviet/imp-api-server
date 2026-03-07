@@ -11,7 +11,9 @@ import { CREDITS_DATASOURCE } from '../src/credits/credits.datasource';
 import { MOCK_TESTS_DATASOURCE } from '../src/mock-tests/mock-tests.datasource';
 import { ATTEMPTS_DATASOURCE } from '../src/attempts/attempts.datasource';
 import { ADMIN_DATASOURCE } from '../src/admin/admin.datasource';
+import { TEACHER_GRADING_DATASOURCE } from '../src/teacher-grading/teacher-grading.datasource';
 import { AttemptStatus } from '@prisma/client';
+import { AIGradingService } from '../src/attempts/grading/ai-grading.service';
 
 describe('API Endpoints (e2e)', () => {
   let app: INestApplication;
@@ -45,11 +47,30 @@ describe('API Endpoints (e2e)', () => {
     updateAttemptAnswers: jest.fn(),
     updateAttemptGrades: jest.fn(),
     findAllByUser: jest.fn(),
+    createGradingRequestWithCreditTransfer: jest.fn(),
+  };
+
+  const mockTeacherGradingDatasource = {
+    findTeacherProfileByFirebaseUid: jest.fn(),
+    findRequestsByTeacher: jest.fn(),
+    findRequestDetail: jest.fn(),
+    updateRequest: jest.fn(),
   };
 
   const mockAdminDatasource = {
     createMockTest: jest.fn(),
     findAllMockTests: jest.fn(),
+  };
+
+  const mockAIGradingService = {
+    gradeWriting: jest.fn(),
+    gradeSpeaking: jest.fn(),
+  };
+
+  const mockStorageProvider = {
+    getPresignedUrl: jest.fn(),
+    uploadFile: jest.fn(),
+    deleteFile: jest.fn(),
   };
 
   // ── Setup ────────────────────────────────────────────────
@@ -62,6 +83,36 @@ describe('API Endpoints (e2e)', () => {
       .useValue({
         canActivate: (context: any) => {
           const req = context.switchToHttp().getRequest();
+          const authHeader = req.headers?.authorization as string | undefined;
+          const token = authHeader?.replace(/^Bearer\s+/i, '').trim();
+
+          if (token === 'student-token') {
+            req.user = {
+              uid: 'student_uid',
+              email: 'student@example.com',
+              name: 'Student User',
+            };
+            return true;
+          }
+
+          if (token === 'teacher1-token') {
+            req.user = {
+              uid: 'teacher1_uid',
+              email: 'teacher1@example.com',
+              name: 'Teacher One',
+            };
+            return true;
+          }
+
+          if (token === 'teacher2-token') {
+            req.user = {
+              uid: 'teacher2_uid',
+              email: 'teacher2@example.com',
+              name: 'Teacher Two',
+            };
+            return true;
+          }
+
           req.user = {
             uid: 'test_uid_123',
             email: 'e2e@test.com',
@@ -94,8 +145,14 @@ describe('API Endpoints (e2e)', () => {
       .useValue(mockMockTestsDatasource)
       .overrideProvider(ATTEMPTS_DATASOURCE)
       .useValue(mockAttemptsDatasource)
+      .overrideProvider(TEACHER_GRADING_DATASOURCE)
+      .useValue(mockTeacherGradingDatasource)
       .overrideProvider(ADMIN_DATASOURCE)
       .useValue(mockAdminDatasource)
+      .overrideProvider(AIGradingService)
+      .useValue(mockAIGradingService)
+      .overrideProvider('IStorageProvider')
+      .useValue(mockStorageProvider)
       .compile();
 
     app = moduleFixture.createNestApplication();
@@ -516,7 +573,733 @@ describe('API Endpoints (e2e)', () => {
   });
 
   // ════════════════════════════════════════════════════════════
-  // 6. AdminController
+  // 6. End-to-End Review Flow
+  // ════════════════════════════════════════════════════════════
+  describe('End-to-End Student -> AI -> Teacher Review Flow', () => {
+    type FlowUser = {
+      id: string;
+      firebaseUid: string;
+      name: string;
+      email: string;
+      role: 'STUDENT' | 'TEACHER';
+      creditBalance: number;
+    };
+
+    type FlowTeacherProfile = {
+      id: string;
+      userId: string;
+      creditRate: number;
+    };
+
+    type FlowGradingRequest = {
+      id: string;
+      attemptId: string;
+      teacherId: string;
+      targetSectionType: 'WRITING' | 'SPEAKING';
+      status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+      feedback: string | null;
+      rubric: Record<string, unknown> | null;
+      finalScore: number | null;
+      createdAt: Date;
+      updatedAt: Date;
+    };
+
+    type FlowState = {
+      users: Record<string, FlowUser>;
+      teacherProfiles: Record<string, FlowTeacherProfile>;
+      attempt: any;
+      gradingRequests: FlowGradingRequest[];
+      requestCounter: number;
+    };
+
+    let flowState: FlowState;
+
+    const createFlowState = (): FlowState => {
+      const createdAt = new Date('2026-03-07T09:00:00.000Z');
+
+      return {
+        users: {
+          student: {
+            id: 'u-student',
+            firebaseUid: 'student_uid',
+            name: 'Student User',
+            email: 'student@example.com',
+            role: 'STUDENT',
+            creditBalance: 180,
+          },
+          teacherOne: {
+            id: 'u-teacher-1',
+            firebaseUid: 'teacher1_uid',
+            name: 'Teacher One',
+            email: 'teacher1@example.com',
+            role: 'TEACHER',
+            creditBalance: 30,
+          },
+          teacherTwo: {
+            id: 'u-teacher-2',
+            firebaseUid: 'teacher2_uid',
+            name: 'Teacher Two',
+            email: 'teacher2@example.com',
+            role: 'TEACHER',
+            creditBalance: 45,
+          },
+        },
+        teacherProfiles: {
+          'tp-1': {
+            id: 'tp-1',
+            userId: 'u-teacher-1',
+            creditRate: 50,
+          },
+          'tp-2': {
+            id: 'tp-2',
+            userId: 'u-teacher-2',
+            creditRate: 55,
+          },
+        },
+        attempt: {
+          id: 'attempt-flow-1',
+          userId: 'u-student',
+          status: AttemptStatus.IN_PROGRESS,
+          score: null,
+          aiGrades: null,
+          masterAudioPath: 'speaking/master/attempt-flow-1.webm',
+          createdAt,
+          answers: {
+            'q-writing-1':
+              'Studying abroad offers practical benefits, including language immersion and career growth.',
+            'q-speaking-1': {
+              type: 'speaking_transcript',
+              history: [
+                { role: 'assistant', content: 'Tell me about your hometown.' },
+                { role: 'user', content: 'My hometown is a coastal city.' },
+              ],
+            },
+          },
+          test: {
+            id: 'test-flow-1',
+            title: 'IELTS Mock Full Test',
+            sections: [
+              {
+                id: 'sec-writing',
+                type: 'WRITING',
+                order: 1,
+                questions: [
+                  {
+                    id: 'q-writing-1',
+                    order: 1,
+                    content: { text: 'Discuss advantages of studying abroad.' },
+                  },
+                ],
+              },
+              {
+                id: 'sec-speaking',
+                type: 'SPEAKING',
+                order: 2,
+                questions: [{ id: 'q-speaking-1', order: 1, content: {} }],
+              },
+            ],
+          },
+        },
+        gradingRequests: [],
+        requestCounter: 0,
+      };
+    };
+
+    const resolveUserByFirebaseUid = (firebaseUid: string) =>
+      Object.values(flowState.users).find(
+        (candidate) => candidate.firebaseUid === firebaseUid,
+      ) ?? null;
+
+    const toTeacherQueueItem = (requestItem: FlowGradingRequest) => {
+      const student = flowState.users.student;
+
+      return {
+        id: requestItem.id,
+        status: requestItem.status,
+        feedback: requestItem.feedback,
+        finalScore: requestItem.finalScore,
+        rubric: requestItem.rubric,
+        targetSectionType: requestItem.targetSectionType,
+        createdAt: requestItem.createdAt,
+        updatedAt: requestItem.updatedAt,
+        attempt: {
+          id: flowState.attempt.id,
+          status: flowState.attempt.status,
+          score: flowState.attempt.score,
+          createdAt: flowState.attempt.createdAt,
+          user: {
+            id: student.id,
+            name: student.name,
+            email: student.email,
+          },
+          test: {
+            id: flowState.attempt.test.id,
+            title: flowState.attempt.test.title,
+            sections: flowState.attempt.test.sections.map((section: any) => ({
+              id: section.id,
+              type: section.type,
+            })),
+          },
+        },
+      };
+    };
+
+    const toTeacherDetail = (requestItem: FlowGradingRequest) => {
+      const student = flowState.users.student;
+      const teacherProfile = flowState.teacherProfiles[requestItem.teacherId];
+      const teacherUser = Object.values(flowState.users).find(
+        (candidate) => candidate.id === teacherProfile.userId,
+      );
+
+      return {
+        id: requestItem.id,
+        status: requestItem.status,
+        feedback: requestItem.feedback,
+        finalScore: requestItem.finalScore,
+        rubric: requestItem.rubric,
+        targetSectionType: requestItem.targetSectionType,
+        teacher: {
+          id: teacherProfile.id,
+          user: {
+            id: teacherUser?.id,
+            name: teacherUser?.name,
+            email: teacherUser?.email,
+          },
+        },
+        attempt: {
+          id: flowState.attempt.id,
+          answers: flowState.attempt.answers,
+          aiGrades: flowState.attempt.aiGrades,
+          score: flowState.attempt.score,
+          masterAudioPath: flowState.attempt.masterAudioPath,
+          createdAt: flowState.attempt.createdAt,
+          user: {
+            id: student.id,
+            name: student.name,
+            email: student.email,
+          },
+          test: {
+            id: flowState.attempt.test.id,
+            title: flowState.attempt.test.title,
+            sections: flowState.attempt.test.sections.map((section: any) => ({
+              id: section.id,
+              type: section.type,
+              order: section.order,
+              questions: section.questions.map((question: any) => ({
+                id: question.id,
+                order: question.order,
+                content: question.content,
+              })),
+            })),
+          },
+        },
+      };
+    };
+
+    beforeEach(() => {
+      flowState = createFlowState();
+
+      mockAIGradingService.gradeWriting.mockResolvedValue({
+        overallBand: 7.5,
+        generalFeedback: 'Task response is clear and well developed.',
+      });
+      mockAIGradingService.gradeSpeaking.mockResolvedValue({
+        overallBand: 6.5,
+        generalFeedback: 'Fluency is decent but pronunciation needs polish.',
+      });
+      mockStorageProvider.getPresignedUrl.mockImplementation(
+        async (filePath: string) => `https://signed.local/${filePath}`,
+      );
+
+      mockAttemptsDatasource.findUserByFirebaseUid.mockImplementation(
+        async (firebaseUid: string) => {
+          const user = resolveUserByFirebaseUid(firebaseUid);
+          return user
+            ? {
+                id: user.id,
+                firebaseUid: user.firebaseUid,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                creditBalance: user.creditBalance,
+              }
+            : null;
+        },
+      );
+
+      mockAttemptsDatasource.findAttemptByIdWithTestAndQuestions.mockImplementation(
+        async (attemptId: string) => {
+          if (attemptId !== flowState.attempt.id) {
+            return null;
+          }
+          return flowState.attempt;
+        },
+      );
+
+      mockAttemptsDatasource.updateAttemptGrades.mockImplementation(
+        async (
+          attemptId: string,
+          grades: Record<string, unknown>,
+          score: number | null,
+          detailedAiFeedback?: Record<string, unknown>,
+        ) => {
+          if (attemptId !== flowState.attempt.id) {
+            throw new Error('ATTEMPT_NOT_FOUND');
+          }
+
+          flowState.attempt = {
+            ...flowState.attempt,
+            status: AttemptStatus.COMPLETED,
+            score,
+            aiGrades: {
+              sections: grades,
+              detailed: detailedAiFeedback,
+            },
+          };
+
+          return flowState.attempt;
+        },
+      );
+
+      mockAttemptsDatasource.createGradingRequestWithCreditTransfer.mockImplementation(
+        async (
+          firebaseUid: string,
+          attemptId: string,
+          teacherProfileId: string,
+          targetSectionType: 'WRITING' | 'SPEAKING',
+        ) => {
+          const student = resolveUserByFirebaseUid(firebaseUid);
+          if (!student) {
+            throw new Error('User not found in transaction');
+          }
+
+          if (
+            attemptId !== flowState.attempt.id ||
+            flowState.attempt.userId !== student.id
+          ) {
+            throw new Error('ATTEMPT_NOT_FOUND_OR_FORBIDDEN');
+          }
+          if (flowState.attempt.status === AttemptStatus.IN_PROGRESS) {
+            throw new Error('ATTEMPT_NOT_COMPLETED');
+          }
+
+          const teacherProfile = flowState.teacherProfiles[teacherProfileId];
+          if (!teacherProfile) {
+            throw new Error('TEACHER_NOT_FOUND');
+          }
+
+          const existingPendingRequest = flowState.gradingRequests.find(
+            (requestItem) =>
+              requestItem.attemptId === attemptId &&
+              requestItem.teacherId === teacherProfileId &&
+              requestItem.status === 'PENDING',
+          );
+          if (existingPendingRequest) {
+            throw new Error('GRADING_REQUEST_EXISTS');
+          }
+
+          const cost = teacherProfile.creditRate;
+          if (student.creditBalance < cost) {
+            throw new Error(
+              `INSUFFICIENT_CREDITS:${cost}:${student.creditBalance}`,
+            );
+          }
+
+          student.creditBalance -= cost;
+          const teacher = Object.values(flowState.users).find(
+            (candidate) => candidate.id === teacherProfile.userId,
+          );
+          if (teacher) {
+            teacher.creditBalance += cost;
+          }
+
+          flowState.requestCounter += 1;
+          const now = new Date(
+            `2026-03-07T10:0${flowState.requestCounter}:00.000Z`,
+          );
+          const newRequest: FlowGradingRequest = {
+            id: `gr-flow-${flowState.requestCounter}`,
+            attemptId,
+            teacherId: teacherProfileId,
+            targetSectionType,
+            status: 'PENDING',
+            feedback: null,
+            rubric: null,
+            finalScore: null,
+            createdAt: now,
+            updatedAt: now,
+          };
+          flowState.gradingRequests.push(newRequest);
+
+          return {
+            ...newRequest,
+            teacher: {
+              id: teacherProfile.id,
+              user: teacher
+                ? {
+                    id: teacher.id,
+                    name: teacher.name,
+                    email: teacher.email,
+                  }
+                : null,
+            },
+          };
+        },
+      );
+
+      mockAttemptsDatasource.findAttemptByIdWithTest.mockImplementation(
+        async (attemptId: string) => {
+          if (attemptId !== flowState.attempt.id) {
+            return null;
+          }
+
+          return {
+            ...flowState.attempt,
+            gradingRequests: flowState.gradingRequests.map((requestItem) => {
+              const teacherProfile =
+                flowState.teacherProfiles[requestItem.teacherId];
+              const teacherUser = Object.values(flowState.users).find(
+                (candidate) => candidate.id === teacherProfile.userId,
+              );
+              return {
+                id: requestItem.id,
+                status: requestItem.status,
+                feedback: requestItem.feedback,
+                finalScore: requestItem.finalScore,
+                teacher: {
+                  id: teacherProfile.id,
+                  user: teacherUser
+                    ? {
+                        name: teacherUser.name,
+                        email: teacherUser.email,
+                      }
+                    : null,
+                },
+              };
+            }),
+            test: {
+              ...flowState.attempt.test,
+              sections: flowState.attempt.test.sections.map((section: any) => ({
+                ...section,
+                questions: section.questions.map((question: any) => ({
+                  ...question,
+                  answerKey: question.answerKey,
+                })),
+              })),
+            },
+          };
+        },
+      );
+
+      mockTeacherGradingDatasource.findTeacherProfileByFirebaseUid.mockImplementation(
+        async (firebaseUid: string) => {
+          const user = resolveUserByFirebaseUid(firebaseUid);
+          if (!user || user.role !== 'TEACHER') {
+            return null;
+          }
+
+          const teacherProfile = Object.values(flowState.teacherProfiles).find(
+            (profile) => profile.userId === user.id,
+          );
+          if (!teacherProfile) {
+            return null;
+          }
+
+          return {
+            id: teacherProfile.id,
+            user: { id: user.id, role: 'TEACHER' },
+          };
+        },
+      );
+
+      mockTeacherGradingDatasource.findRequestsByTeacher.mockImplementation(
+        async (teacherId: string) =>
+          flowState.gradingRequests
+            .filter((requestItem) => requestItem.teacherId === teacherId)
+            .map((requestItem) => toTeacherQueueItem(requestItem)),
+      );
+
+      mockTeacherGradingDatasource.findRequestDetail.mockImplementation(
+        async (requestId: string, teacherId: string) => {
+          const requestItem = flowState.gradingRequests.find(
+            (candidate) =>
+              candidate.id === requestId && candidate.teacherId === teacherId,
+          );
+          if (!requestItem) {
+            return null;
+          }
+
+          return toTeacherDetail(requestItem);
+        },
+      );
+
+      mockTeacherGradingDatasource.updateRequest.mockImplementation(
+        async (
+          requestId: string,
+          teacherId: string,
+          data: {
+            feedback?: string;
+            rubric?: Record<string, unknown>;
+            finalScore?: number;
+            status?: string;
+          },
+        ) => {
+          const requestItem = flowState.gradingRequests.find(
+            (candidate) =>
+              candidate.id === requestId && candidate.teacherId === teacherId,
+          );
+          if (!requestItem) {
+            throw new Error('REQUEST_NOT_FOUND_OR_FORBIDDEN');
+          }
+
+          if (data.feedback !== undefined) {
+            requestItem.feedback = data.feedback;
+          }
+          if (data.rubric !== undefined) {
+            requestItem.rubric = data.rubric;
+          }
+          if (data.finalScore !== undefined) {
+            requestItem.finalScore = data.finalScore;
+          }
+          if (data.status) {
+            requestItem.status = data.status as FlowGradingRequest['status'];
+          }
+          requestItem.updatedAt = new Date(
+            requestItem.updatedAt.getTime() + 60_000,
+          );
+
+          return {
+            id: requestItem.id,
+            attemptId: requestItem.attemptId,
+            teacherId: requestItem.teacherId,
+            targetSectionType: requestItem.targetSectionType,
+            status: requestItem.status,
+            feedback: requestItem.feedback,
+            rubric: requestItem.rubric,
+            finalScore: requestItem.finalScore,
+            createdAt: requestItem.createdAt,
+            updatedAt: requestItem.updatedAt,
+          };
+        },
+      );
+    });
+
+    it('executes the full writing + speaking review lifecycle with AI scoring', async () => {
+      const submitResponse = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/submit')
+        .set('Authorization', 'Bearer student-token');
+
+      expect(submitResponse.status).toBe(201);
+      expect(submitResponse.body.status).toBe(AttemptStatus.COMPLETED);
+      expect(submitResponse.body.score).toBe(7);
+
+      expect(mockAIGradingService.gradeWriting).toHaveBeenCalled();
+      expect(mockAIGradingService.gradeSpeaking).toHaveBeenCalled();
+
+      const writingBooking = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/book-review')
+        .set('Authorization', 'Bearer student-token')
+        .send({ teacherId: 'tp-1', targetSectionType: 'WRITING' });
+
+      expect(writingBooking.status).toBe(201);
+      expect(writingBooking.body.targetSectionType).toBe('WRITING');
+
+      const speakingBooking = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/book-review')
+        .set('Authorization', 'Bearer student-token')
+        .send({ teacherId: 'tp-2', targetSectionType: 'SPEAKING' });
+
+      expect(speakingBooking.status).toBe(201);
+      expect(speakingBooking.body.targetSectionType).toBe('SPEAKING');
+
+      const teacherOneQueue = await request(app.getHttpServer())
+        .get('/api/v1/teacher/grading-requests')
+        .set('Authorization', 'Bearer teacher1-token');
+      expect(teacherOneQueue.status).toBe(200);
+      expect(teacherOneQueue.body).toHaveLength(1);
+      expect(teacherOneQueue.body[0].targetSectionType).toBe('WRITING');
+
+      const teacherTwoQueue = await request(app.getHttpServer())
+        .get('/api/v1/teacher/grading-requests')
+        .set('Authorization', 'Bearer teacher2-token');
+      expect(teacherTwoQueue.status).toBe(200);
+      expect(teacherTwoQueue.body).toHaveLength(1);
+      expect(teacherTwoQueue.body[0].targetSectionType).toBe('SPEAKING');
+
+      const detailTeacherOne = await request(app.getHttpServer())
+        .get(`/api/v1/teacher/grading-requests/${writingBooking.body.id}`)
+        .set('Authorization', 'Bearer teacher1-token');
+      expect(detailTeacherOne.status).toBe(200);
+      expect(detailTeacherOne.body.attempt.masterAudioUrl).toContain(
+        'signed.local/speaking/master/attempt-flow-1.webm',
+      );
+
+      const detailTeacherTwo = await request(app.getHttpServer())
+        .get(`/api/v1/teacher/grading-requests/${speakingBooking.body.id}`)
+        .set('Authorization', 'Bearer teacher2-token');
+      expect(detailTeacherTwo.status).toBe(200);
+      expect(detailTeacherTwo.body.targetSectionType).toBe('SPEAKING');
+
+      const draftTeacherOne = await request(app.getHttpServer())
+        .patch(
+          `/api/v1/teacher/grading-requests/${writingBooking.body.id}/draft`,
+        )
+        .set('Authorization', 'Bearer teacher1-token')
+        .send({
+          feedback: 'Writing draft feedback.',
+          rubric: { task: 7.5, cohesion: 7, lexical: 7, grammar: 7.5 },
+        });
+      expect(draftTeacherOne.status).toBe(200);
+      expect(draftTeacherOne.body.status).toBe('IN_PROGRESS');
+
+      const draftTeacherTwo = await request(app.getHttpServer())
+        .patch(
+          `/api/v1/teacher/grading-requests/${speakingBooking.body.id}/draft`,
+        )
+        .set('Authorization', 'Bearer teacher2-token')
+        .send({
+          feedback: 'Speaking draft feedback.',
+          rubric: {
+            fluency: 6.5,
+            lexical: 6.5,
+            grammar: 6.5,
+            pronunciation: 6,
+          },
+        });
+      expect(draftTeacherTwo.status).toBe(200);
+      expect(draftTeacherTwo.body.status).toBe('IN_PROGRESS');
+
+      const submitTeacherOne = await request(app.getHttpServer())
+        .post(
+          `/api/v1/teacher/grading-requests/${writingBooking.body.id}/submit`,
+        )
+        .set('Authorization', 'Bearer teacher1-token')
+        .send({
+          feedback: 'Final writing review with actionable improvements.',
+          rubric: { task: 7.5, cohesion: 7, lexical: 7, grammar: 7.5 },
+          finalScore: 7.5,
+        });
+      expect(submitTeacherOne.status).toBe(201);
+      expect(submitTeacherOne.body.status).toBe('COMPLETED');
+      expect(submitTeacherOne.body.finalScore).toBe(7.5);
+
+      const submitTeacherTwo = await request(app.getHttpServer())
+        .post(
+          `/api/v1/teacher/grading-requests/${speakingBooking.body.id}/submit`,
+        )
+        .set('Authorization', 'Bearer teacher2-token')
+        .send({
+          feedback: 'Final speaking feedback and pronunciation tips.',
+          rubric: {
+            fluency: 6.5,
+            lexical: 6.5,
+            grammar: 6.5,
+            pronunciation: 6,
+          },
+          finalScore: 6.5,
+        });
+      expect(submitTeacherTwo.status).toBe(201);
+      expect(submitTeacherTwo.body.status).toBe('COMPLETED');
+      expect(submitTeacherTwo.body.finalScore).toBe(6.5);
+
+      const studentReview = await request(app.getHttpServer())
+        .get('/api/v1/attempts/attempt-flow-1')
+        .set('Authorization', 'Bearer student-token');
+
+      expect(studentReview.status).toBe(200);
+      expect(studentReview.body.gradingRequests).toHaveLength(2);
+      expect(studentReview.body.gradingRequests).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            status: 'COMPLETED',
+            finalScore: 7.5,
+            feedback: 'Final writing review with actionable improvements.',
+          }),
+          expect.objectContaining({
+            status: 'COMPLETED',
+            finalScore: 6.5,
+            feedback: 'Final speaking feedback and pronunciation tips.',
+          }),
+        ]),
+      );
+    });
+
+    it('rejects invalid review type when booking teacher review', async () => {
+      flowState.attempt.status = AttemptStatus.COMPLETED;
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/book-review')
+        .set('Authorization', 'Bearer student-token')
+        .send({ teacherId: 'tp-1', targetSectionType: 'READING' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toEqual(
+        expect.arrayContaining([
+          'targetSectionType must be one of the following values: WRITING, SPEAKING',
+        ]),
+      );
+    });
+
+    it('blocks duplicate pending request for same teacher and attempt', async () => {
+      flowState.attempt.status = AttemptStatus.COMPLETED;
+
+      const firstBooking = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/book-review')
+        .set('Authorization', 'Bearer student-token')
+        .send({ teacherId: 'tp-1', targetSectionType: 'WRITING' });
+      expect(firstBooking.status).toBe(201);
+
+      const duplicateBooking = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/book-review')
+        .set('Authorization', 'Bearer student-token')
+        .send({ teacherId: 'tp-1', targetSectionType: 'SPEAKING' });
+
+      expect(duplicateBooking.status).toBe(400);
+      expect(duplicateBooking.body.message).toContain(
+        'You already have a pending review request for this teacher',
+      );
+    });
+
+    it('returns insufficient credit error when student cannot pay review cost', async () => {
+      flowState.attempt.status = AttemptStatus.COMPLETED;
+      flowState.users.student.creditBalance = 20;
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/book-review')
+        .set('Authorization', 'Bearer student-token')
+        .send({ teacherId: 'tp-1', targetSectionType: 'WRITING' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain('Insufficient credits');
+    });
+
+    it('prevents teacher from reading or updating another teacher request', async () => {
+      flowState.attempt.status = AttemptStatus.COMPLETED;
+
+      const booking = await request(app.getHttpServer())
+        .post('/api/v1/attempts/attempt-flow-1/book-review')
+        .set('Authorization', 'Bearer student-token')
+        .send({ teacherId: 'tp-1', targetSectionType: 'WRITING' });
+      expect(booking.status).toBe(201);
+
+      const unauthorizedDetail = await request(app.getHttpServer())
+        .get(`/api/v1/teacher/grading-requests/${booking.body.id}`)
+        .set('Authorization', 'Bearer teacher2-token');
+      expect(unauthorizedDetail.status).toBe(404);
+
+      const unauthorizedDraft = await request(app.getHttpServer())
+        .patch(`/api/v1/teacher/grading-requests/${booking.body.id}/draft`)
+        .set('Authorization', 'Bearer teacher2-token')
+        .send({
+          feedback: 'Should not be allowed',
+          rubric: { task: 7 },
+        });
+      expect(unauthorizedDraft.status).toBe(404);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════
+  // 7. AdminController
   // ════════════════════════════════════════════════════════════
   describe('AdminController', () => {
     it('POST /api/v1/admin/seed - should seed a mock test', async () => {
