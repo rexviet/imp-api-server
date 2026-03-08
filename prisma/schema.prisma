@@ -154,4 +154,6 @@ model GradingRequest {
   finalScore  Float?        // Human-revised band score
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
+
+  @@unique([attemptId, teacherId, targetSectionType, status], map: "grading_request_attempt_teacher_section_status_key")
 }
