@@ -23,11 +23,35 @@ export class SpeakingSessionService {
     private readonly prisma: PrismaService,
   ) {}
 
+  private async assertAttemptOwnership(
+    firebaseUid: string,
+    attemptId: string,
+  ): Promise<void> {
+    const attempt = await this.prisma.client.userAttempt.findFirst({
+      where: {
+        id: attemptId,
+        user: {
+          firebaseUid,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!attempt) {
+      throw new Error('ATTEMPT_NOT_FOUND_OR_FORBIDDEN');
+    }
+  }
+
   /**
    * Generates a presigned upload URL for the master record.
    * Updates the attempt record with the planned storage path.
    */
-  async createUploadUrl(attemptId: string): Promise<string> {
+  async createUploadUrl(
+    attemptId: string,
+    firebaseUid: string,
+  ): Promise<string> {
+    await this.assertAttemptOwnership(firebaseUid, attemptId);
+
     const path = `speaking/master-records/${attemptId}.webm`;
     const bucket = process.env.MINIO_BUCKET || 'ielts-master-records';
 
@@ -68,7 +92,12 @@ export class SpeakingSessionService {
     attemptId: string,
     questionId: string,
     questionContext?: string,
+    firebaseUid?: string,
   ): Promise<string> {
+    if (firebaseUid) {
+      await this.assertAttemptOwnership(firebaseUid, attemptId);
+    }
+
     const systemPrompt: ChatMessage = {
       role: 'system',
       content: `You are an IELTS Speaking examiner. 
@@ -114,7 +143,12 @@ Otherwise, start the conversation naturally based on the task description above.
   async processTurn(
     attemptId: string,
     audioBase64: string,
+    firebaseUid?: string,
   ): Promise<{ transcript: string; nextQuestion: string }> {
+    if (firebaseUid) {
+      await this.assertAttemptOwnership(firebaseUid, attemptId);
+    }
+
     const session = this.sessions.get(attemptId);
     if (!session) {
       this.logger.error(`Attempt ${attemptId} has no active session.`);
@@ -145,7 +179,11 @@ Otherwise, start the conversation naturally based on the task description above.
     };
   }
 
-  async endSession(attemptId: string) {
+  async endSession(attemptId: string, firebaseUid?: string) {
+    if (firebaseUid) {
+      await this.assertAttemptOwnership(firebaseUid, attemptId);
+    }
+
     const session = this.sessions.get(attemptId);
     if (session) {
       try {

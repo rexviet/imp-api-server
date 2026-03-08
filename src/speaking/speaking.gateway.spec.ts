@@ -16,6 +16,7 @@ describe('SpeakingGateway', () => {
       join: jest.fn(),
       leave: jest.fn(),
       emit: jest.fn(),
+      user: { uid: 'test-user' },
       handshake: {
         auth: { token: 'valid-token' },
       },
@@ -35,6 +36,7 @@ describe('SpeakingGateway', () => {
         transcript: 'I live in London',
         nextQuestion: 'What is the weather like there?',
       }),
+      createUploadUrl: jest.fn().mockResolvedValue('http://upload'),
       endSession: jest.fn(),
     };
 
@@ -68,6 +70,7 @@ describe('SpeakingGateway', () => {
         'test-attempt-id',
         'q1',
         undefined,
+        'test-user',
       );
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-ready', {
         message: 'Hello from AI',
@@ -77,6 +80,11 @@ describe('SpeakingGateway', () => {
 
   describe('handleAudioChunk', () => {
     it('should receive audio chunk and emit examiner-response instantly via AI service', async () => {
+      await gateway.handleJoin(
+        { attemptId: 'test-attempt-id', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+
       const data = { attemptId: 'test-attempt-id', audio: 'base64-data' };
 
       await gateway.handleAudioChunk(data, mockSocket as Socket);
@@ -84,21 +92,67 @@ describe('SpeakingGateway', () => {
       expect(mockSpeakingSessionService.processTurn).toHaveBeenCalledWith(
         'test-attempt-id',
         'base64-data',
+        'test-user',
       );
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-response', {
         transcript: 'I live in London',
         nextQuestion: 'What is the weather like there?',
       });
     });
+
+    it('should emit error when audio chunk rate limit is exceeded', async () => {
+      await gateway.handleJoin(
+        { attemptId: 'test-attempt-id', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+
+      jest
+        .spyOn(Date, 'now')
+        .mockImplementationOnce(() => 1000)
+        .mockImplementationOnce(() => 1001)
+        .mockImplementationOnce(() => 1002)
+        .mockImplementationOnce(() => 1003)
+        .mockImplementationOnce(() => 1004)
+        .mockImplementationOnce(() => 1005)
+        .mockImplementationOnce(() => 1006)
+        .mockImplementationOnce(() => 1007)
+        .mockImplementationOnce(() => 1008)
+        .mockImplementationOnce(() => 1009)
+        .mockImplementationOnce(() => 1010)
+        .mockImplementationOnce(() => 1011)
+        .mockImplementationOnce(() => 1012);
+
+      for (let i = 0; i < 12; i++) {
+        await gateway.handleAudioChunk(
+          { attemptId: 'test-attempt-id', audio: `chunk-${i}` },
+          mockSocket as Socket,
+        );
+      }
+
+      await gateway.handleAudioChunk(
+        { attemptId: 'test-attempt-id', audio: 'chunk-over-limit' },
+        mockSocket as Socket,
+      );
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'Failed to process speaking request',
+      });
+      jest.restoreAllMocks();
+    });
   });
 
   describe('handleEnd', () => {
-    it('should delete session state and leave room', () => {
+    it('should delete session state and leave room', async () => {
       const data = { attemptId: 'test-attempt-id' };
-      gateway.handleEnd(data, mockSocket as Socket);
+      await gateway.handleJoin(
+        { attemptId: 'test-attempt-id', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+      await gateway.handleEnd(data, mockSocket as Socket);
 
       expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith(
         'test-attempt-id',
+        'test-user',
       );
       expect(mockSocket.leave).toHaveBeenCalledWith('test-attempt-id');
     });
@@ -112,10 +166,11 @@ describe('SpeakingGateway', () => {
       await gateway.handleJoin(data, mockSocket as Socket);
 
       // Then trigger disconnect
-      gateway.handleDisconnect(mockSocket as Socket);
+      await gateway.handleDisconnect(mockSocket as Socket);
 
       expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith(
         'disc-attempt',
+        'test-user',
       );
     });
 
@@ -123,6 +178,24 @@ describe('SpeakingGateway', () => {
       expect(() =>
         gateway.handleDisconnect(mockSocket as Socket),
       ).not.toThrow();
+    });
+  });
+
+  describe('authorization boundaries', () => {
+    it('should emit unauthorized error when request-upload-url attempt does not match joined attempt', async () => {
+      await gateway.handleJoin(
+        { attemptId: 'attempt-a', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+
+      await gateway.handleRequestUploadUrl(
+        { attemptId: 'attempt-b' },
+        mockSocket as Socket,
+      );
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'Unauthorized',
+      });
     });
   });
 });
