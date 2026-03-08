@@ -99,6 +99,46 @@ describe('SpeakingGateway', () => {
         nextQuestion: 'What is the weather like there?',
       });
     });
+
+    it('should emit error when audio chunk rate limit is exceeded', async () => {
+      await gateway.handleJoin(
+        { attemptId: 'test-attempt-id', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+
+      jest
+        .spyOn(Date, 'now')
+        .mockImplementationOnce(() => 1000)
+        .mockImplementationOnce(() => 1001)
+        .mockImplementationOnce(() => 1002)
+        .mockImplementationOnce(() => 1003)
+        .mockImplementationOnce(() => 1004)
+        .mockImplementationOnce(() => 1005)
+        .mockImplementationOnce(() => 1006)
+        .mockImplementationOnce(() => 1007)
+        .mockImplementationOnce(() => 1008)
+        .mockImplementationOnce(() => 1009)
+        .mockImplementationOnce(() => 1010)
+        .mockImplementationOnce(() => 1011)
+        .mockImplementationOnce(() => 1012);
+
+      for (let i = 0; i < 12; i++) {
+        await gateway.handleAudioChunk(
+          { attemptId: 'test-attempt-id', audio: `chunk-${i}` },
+          mockSocket as Socket,
+        );
+      }
+
+      await gateway.handleAudioChunk(
+        { attemptId: 'test-attempt-id', audio: 'chunk-over-limit' },
+        mockSocket as Socket,
+      );
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'Failed to process speaking request',
+      });
+      jest.restoreAllMocks();
+    });
   });
 
   describe('handleEnd', () => {

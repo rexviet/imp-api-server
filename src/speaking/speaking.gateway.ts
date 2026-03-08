@@ -25,12 +25,15 @@ export class SpeakingGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   private readonly MAX_AUDIO_BASE64_LENGTH = 1_000_000;
+  private readonly AUDIO_CHUNK_WINDOW_MS = 10_000;
+  private readonly MAX_AUDIO_CHUNKS_PER_WINDOW = 12;
 
   @WebSocketServer()
   server: Server;
 
   private logger: Logger = new Logger('SpeakingGateway');
   private clientToAttemptMap = new Map<string, string>();
+  private clientChunkTimestamps = new Map<string, number[]>();
 
   constructor(private speakingSessionService: SpeakingSessionService) {}
 
@@ -64,6 +67,22 @@ export class SpeakingGateway
     });
   }
 
+  private assertAudioChunkRateLimit(client: Socket): void {
+    const now = Date.now();
+    const windowStart = now - this.AUDIO_CHUNK_WINDOW_MS;
+    const recentTimestamps =
+      this.clientChunkTimestamps
+        .get(client.id)
+        ?.filter((ts) => ts >= windowStart) ?? [];
+
+    if (recentTimestamps.length >= this.MAX_AUDIO_CHUNKS_PER_WINDOW) {
+      throw new Error('AUDIO_CHUNK_RATE_LIMIT_EXCEEDED');
+    }
+
+    recentTimestamps.push(now);
+    this.clientChunkTimestamps.set(client.id, recentTimestamps);
+  }
+
   afterInit(server: Server) {
     this.logger.log('Speaking Gateway Initialized');
   }
@@ -93,6 +112,7 @@ export class SpeakingGateway
         );
       }
       this.clientToAttemptMap.delete(client.id);
+      this.clientChunkTimestamps.delete(client.id);
     }
   }
 
@@ -136,6 +156,7 @@ export class SpeakingGateway
   ) {
     try {
       this.assertClientAttemptScope(client, data.attemptId);
+      this.assertAudioChunkRateLimit(client);
 
       this.logger.log(
         `Received audio chunk from ${client.id} for attempt ${data.attemptId}`,
@@ -181,6 +202,7 @@ export class SpeakingGateway
       this.logger.log(`Client ${client.id} ended attempt ${data.attemptId}`);
       await this.speakingSessionService.endSession(data.attemptId, firebaseUid);
       this.clientToAttemptMap.delete(client.id);
+      this.clientChunkTimestamps.delete(client.id);
       client.leave(data.attemptId);
     } catch (err) {
       this.logger.error(`Error ending speaking session: ${err.message}`);
