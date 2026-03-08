@@ -455,5 +455,57 @@ describeIfDatabase(
           bookingSuccessCount * seedContext.teacherProfile.creditRate,
       );
     }, 15000);
+
+    it('should allow re-book after completion while still preventing duplicate pending request', async () => {
+      const firstRequest =
+        await datasource.createGradingRequestWithCreditTransfer(
+          seedContext.student.firebaseUid,
+          seedContext.attempt.id,
+          seedContext.teacherProfile.id,
+          'WRITING',
+        );
+
+      await prismaService.client.gradingRequest.update({
+        where: { id: firstRequest.id },
+        data: { status: GradingStatus.COMPLETED },
+      });
+
+      const secondRequest =
+        await datasource.createGradingRequestWithCreditTransfer(
+          seedContext.student.firebaseUid,
+          seedContext.attempt.id,
+          seedContext.teacherProfile.id,
+          'WRITING',
+        );
+
+      await expect(
+        prismaService.client.gradingRequest.update({
+          where: { id: secondRequest.id },
+          data: { status: GradingStatus.COMPLETED },
+        }),
+      ).resolves.toBeTruthy();
+
+      const [completedRequests, pendingRequests] = await Promise.all([
+        prismaService.client.gradingRequest.count({
+          where: {
+            attemptId: seedContext.attempt.id,
+            teacherId: seedContext.teacherProfile.id,
+            targetSectionType: 'WRITING',
+            status: GradingStatus.COMPLETED,
+          },
+        }),
+        prismaService.client.gradingRequest.count({
+          where: {
+            attemptId: seedContext.attempt.id,
+            teacherId: seedContext.teacherProfile.id,
+            targetSectionType: 'WRITING',
+            status: GradingStatus.PENDING,
+          },
+        }),
+      ]);
+
+      expect(completedRequests).toBe(2);
+      expect(pendingRequests).toBe(0);
+    }, 15000);
   },
 );
