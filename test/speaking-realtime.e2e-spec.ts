@@ -10,6 +10,7 @@ import { SttService } from '../src/speaking/stt.service';
 
 type AttemptState = {
   id: string;
+  ownerFirebaseUid: string;
   answers: Record<string, unknown>;
   masterAudioBucket: string | null;
   masterAudioPath: string | null;
@@ -52,17 +53,30 @@ describe('Speaking Realtime Flow (e2e)', () => {
   let socket: Socket;
   let baseUrl: string;
 
-  const attemptState: AttemptState = {
-    id: 'attempt_ws_1',
-    answers: {},
-    masterAudioBucket: null,
-    masterAudioPath: null,
+  const attemptsById: Record<string, AttemptState> = {
+    attempt_ws_1: {
+      id: 'attempt_ws_1',
+      ownerFirebaseUid: 'student_ws_uid',
+      answers: {},
+      masterAudioBucket: null,
+      masterAudioPath: null,
+    },
+    attempt_ws_other: {
+      id: 'attempt_ws_other',
+      ownerFirebaseUid: 'other_student_uid',
+      answers: {},
+      masterAudioBucket: null,
+      masterAudioPath: null,
+    },
   };
 
   const mockFirebaseService = {
     verifyToken: jest.fn().mockImplementation(async (token: string) => {
       if (token === 'ws-valid-token') {
         return { uid: 'student_ws_uid', email: 'student.ws@example.com' };
+      }
+      if (token === 'ws-other-valid-token') {
+        return { uid: 'other_student_uid', email: 'other.ws@example.com' };
       }
       throw new Error('Invalid token');
     }),
@@ -73,45 +87,62 @@ describe('Speaking Realtime Flow (e2e)', () => {
   const mockPrismaService = {
     client: {
       userAttempt: {
+        findFirst: jest.fn().mockImplementation(async ({ where }) => {
+          const attempt = attemptsById[where.id];
+          if (!attempt) {
+            return null;
+          }
+
+          if (
+            where.user?.firebaseUid &&
+            attempt.ownerFirebaseUid !== where.user.firebaseUid
+          ) {
+            return null;
+          }
+
+          return { id: attempt.id };
+        }),
         findUnique: jest.fn().mockImplementation(async ({ where, select }) => {
-          if (where.id !== attemptState.id) {
+          const attempt = attemptsById[where.id];
+          if (!attempt) {
             return null;
           }
 
           if (select) {
             return {
-              masterAudioBucket: attemptState.masterAudioBucket,
-              masterAudioPath: attemptState.masterAudioPath,
+              masterAudioBucket: attempt.masterAudioBucket,
+              masterAudioPath: attempt.masterAudioPath,
             };
           }
 
           return {
-            id: attemptState.id,
-            answers: attemptState.answers,
-            masterAudioBucket: attemptState.masterAudioBucket,
-            masterAudioPath: attemptState.masterAudioPath,
+            id: attempt.id,
+            answers: attempt.answers,
+            masterAudioBucket: attempt.masterAudioBucket,
+            masterAudioPath: attempt.masterAudioPath,
           };
         }),
         update: jest.fn().mockImplementation(async ({ where, data }) => {
-          if (where.id !== attemptState.id) {
+          const attempt = attemptsById[where.id];
+          if (!attempt) {
             throw new Error('Attempt not found');
           }
 
           if (data.answers !== undefined) {
-            attemptState.answers = data.answers as Record<string, unknown>;
+            attempt.answers = data.answers as Record<string, unknown>;
           }
           if (data.masterAudioBucket !== undefined) {
-            attemptState.masterAudioBucket = data.masterAudioBucket as string;
+            attempt.masterAudioBucket = data.masterAudioBucket as string;
           }
           if (data.masterAudioPath !== undefined) {
-            attemptState.masterAudioPath = data.masterAudioPath as string;
+            attempt.masterAudioPath = data.masterAudioPath as string;
           }
 
           return {
-            id: attemptState.id,
-            answers: attemptState.answers,
-            masterAudioBucket: attemptState.masterAudioBucket,
-            masterAudioPath: attemptState.masterAudioPath,
+            id: attempt.id,
+            answers: attempt.answers,
+            masterAudioBucket: attempt.masterAudioBucket,
+            masterAudioPath: attempt.masterAudioPath,
           };
         }),
       },
@@ -168,6 +199,27 @@ describe('Speaking Realtime Flow (e2e)', () => {
     baseUrl = `http://127.0.0.1:${address.port}`;
   });
 
+  beforeEach(() => {
+    attemptsById.attempt_ws_1.answers = {};
+    attemptsById.attempt_ws_1.masterAudioBucket = null;
+    attemptsById.attempt_ws_1.masterAudioPath = null;
+
+    attemptsById.attempt_ws_other.answers = {};
+    attemptsById.attempt_ws_other.masterAudioBucket = null;
+    attemptsById.attempt_ws_other.masterAudioPath = null;
+
+    jest.clearAllMocks();
+    mockAIService.generateResponse
+      .mockResolvedValueOnce('Good morning. Could you tell me your full name?')
+      .mockResolvedValueOnce('Where are you from?');
+    mockSttService.transcribeAudio.mockResolvedValue(
+      'My full name is John Nguyen.',
+    );
+    mockStorageProvider.getPresignedUploadUrl.mockResolvedValue(
+      'https://upload.local/speaking/master-records/attempt_ws_1.webm',
+    );
+  });
+
   afterEach(async () => {
     if (socket?.connected) {
       socket.disconnect();
@@ -198,7 +250,7 @@ describe('Speaking Realtime Flow (e2e)', () => {
     await waitForSocketEvent(socket, 'connect');
 
     socket.emit('join-speaking-test', {
-      attemptId: attemptState.id,
+      attemptId: attemptsById.attempt_ws_1.id,
       questionId: 'q-speaking-1',
       questionContext: 'Part 1 introduction',
     });
@@ -210,7 +262,7 @@ describe('Speaking Realtime Flow (e2e)', () => {
     expect(ready.message).toContain('Good morning');
 
     socket.emit('send-audio-chunk', {
-      attemptId: attemptState.id,
+      attemptId: attemptsById.attempt_ws_1.id,
       audio: 'data:audio/webm;base64,dGVzdA==',
     });
 
@@ -224,7 +276,9 @@ describe('Speaking Realtime Flow (e2e)', () => {
       nextQuestion: 'Where are you from?',
     });
 
-    socket.emit('request-upload-url', { attemptId: attemptState.id });
+    socket.emit('request-upload-url', {
+      attemptId: attemptsById.attempt_ws_1.id,
+    });
 
     const uploadPayload = await waitForSocketEvent<{ uploadUrl: string }>(
       socket,
@@ -237,27 +291,36 @@ describe('Speaking Realtime Flow (e2e)', () => {
 
     await waitForCondition(
       () =>
-        attemptState.masterAudioPath ===
+        attemptsById.attempt_ws_1.masterAudioPath ===
         'speaking/master-records/attempt_ws_1.webm',
     );
 
-    socket.emit('end-speaking-test', { attemptId: attemptState.id });
+    socket.emit('end-speaking-test', {
+      attemptId: attemptsById.attempt_ws_1.id,
+    });
 
     await waitForCondition(
       () =>
         Boolean(
-          (attemptState.answers['q-speaking-1'] as { history?: unknown[] })
-            ?.history,
+          (
+            attemptsById.attempt_ws_1.answers['q-speaking-1'] as {
+              history?: unknown[];
+            }
+          )?.history,
         ),
       5000,
     );
 
-    expect(attemptState.masterAudioBucket).toBe('ielts-master-records');
-    expect(attemptState.masterAudioPath).toBe(
+    expect(attemptsById.attempt_ws_1.masterAudioBucket).toBe(
+      'ielts-master-records',
+    );
+    expect(attemptsById.attempt_ws_1.masterAudioPath).toBe(
       'speaking/master-records/attempt_ws_1.webm',
     );
 
-    const persistedTranscript = attemptState.answers['q-speaking-1'] as {
+    const persistedTranscript = attemptsById.attempt_ws_1.answers[
+      'q-speaking-1'
+    ] as {
       type: string;
       history: Array<{ role: string; content: string }>;
     };
@@ -283,4 +346,75 @@ describe('Speaking Realtime Flow (e2e)', () => {
       'speaking/master-records/attempt_ws_1.webm',
     );
   }, 20000);
+
+  it('rejects websocket connection when auth token is invalid', async () => {
+    const unauthSocket = io(`${baseUrl}/speaking`, {
+      transports: ['websocket'],
+      auth: { token: 'invalid-token' },
+      reconnection: false,
+      forceNew: true,
+    });
+
+    unauthSocket.emit('join-speaking-test', {
+      attemptId: attemptsById.attempt_ws_1.id,
+      questionId: 'q-speaking-1',
+      questionContext: 'Part 1 introduction',
+    });
+
+    const authFailure = await new Promise<string>((resolve) => {
+      let settled = false;
+      const finish = (value: string) => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+
+      unauthSocket.once('connect_error', (err: { message?: string }) =>
+        finish(`connect_error:${err?.message ?? 'unknown'}`),
+      );
+      unauthSocket.once('error', (payload: { message?: string }) =>
+        finish(`error:${payload?.message ?? 'unknown'}`),
+      );
+      unauthSocket.once('exception', (payload: { message?: string }) =>
+        finish(`exception:${payload?.message ?? 'unknown'}`),
+      );
+      unauthSocket.once('disconnect', (reason: string) =>
+        finish(`disconnect:${reason}`),
+      );
+      setTimeout(() => finish('timeout'), 6000);
+    });
+
+    expect(authFailure).not.toBe('timeout');
+    expect(authFailure.toLowerCase()).toContain('unauthor');
+
+    unauthSocket.disconnect();
+  }, 10000);
+
+  it('rejects speaking session start when user attempts to access another user attempt', async () => {
+    const errors: string[] = [];
+
+    socket = io(`${baseUrl}/speaking`, {
+      transports: ['websocket'],
+      auth: { token: 'ws-valid-token' },
+      reconnection: false,
+      forceNew: true,
+    });
+
+    socket.on('error', (payload: { message?: string }) => {
+      errors.push(payload?.message ?? 'unknown-error');
+    });
+
+    await waitForSocketEvent(socket, 'connect');
+
+    socket.emit('join-speaking-test', {
+      attemptId: attemptsById.attempt_ws_other.id,
+      questionId: 'q-speaking-1',
+      questionContext: 'Part 1 introduction',
+    });
+
+    await waitForCondition(() => errors.includes('Unauthorized'), 5000);
+
+    expect(errors).toContain('Unauthorized');
+  });
 });

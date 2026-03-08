@@ -16,6 +16,7 @@ describe('SpeakingGateway', () => {
       join: jest.fn(),
       leave: jest.fn(),
       emit: jest.fn(),
+      user: { uid: 'test-user' },
       handshake: {
         auth: { token: 'valid-token' },
       },
@@ -35,6 +36,7 @@ describe('SpeakingGateway', () => {
         transcript: 'I live in London',
         nextQuestion: 'What is the weather like there?',
       }),
+      createUploadUrl: jest.fn().mockResolvedValue('http://upload'),
       endSession: jest.fn(),
     };
 
@@ -68,6 +70,7 @@ describe('SpeakingGateway', () => {
         'test-attempt-id',
         'q1',
         undefined,
+        'test-user',
       );
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-ready', {
         message: 'Hello from AI',
@@ -77,6 +80,11 @@ describe('SpeakingGateway', () => {
 
   describe('handleAudioChunk', () => {
     it('should receive audio chunk and emit examiner-response instantly via AI service', async () => {
+      await gateway.handleJoin(
+        { attemptId: 'test-attempt-id', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+
       const data = { attemptId: 'test-attempt-id', audio: 'base64-data' };
 
       await gateway.handleAudioChunk(data, mockSocket as Socket);
@@ -84,6 +92,7 @@ describe('SpeakingGateway', () => {
       expect(mockSpeakingSessionService.processTurn).toHaveBeenCalledWith(
         'test-attempt-id',
         'base64-data',
+        'test-user',
       );
       expect(mockSocket.emit).toHaveBeenCalledWith('examiner-response', {
         transcript: 'I live in London',
@@ -93,12 +102,17 @@ describe('SpeakingGateway', () => {
   });
 
   describe('handleEnd', () => {
-    it('should delete session state and leave room', () => {
+    it('should delete session state and leave room', async () => {
       const data = { attemptId: 'test-attempt-id' };
-      gateway.handleEnd(data, mockSocket as Socket);
+      await gateway.handleJoin(
+        { attemptId: 'test-attempt-id', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+      await gateway.handleEnd(data, mockSocket as Socket);
 
       expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith(
         'test-attempt-id',
+        'test-user',
       );
       expect(mockSocket.leave).toHaveBeenCalledWith('test-attempt-id');
     });
@@ -112,10 +126,11 @@ describe('SpeakingGateway', () => {
       await gateway.handleJoin(data, mockSocket as Socket);
 
       // Then trigger disconnect
-      gateway.handleDisconnect(mockSocket as Socket);
+      await gateway.handleDisconnect(mockSocket as Socket);
 
       expect(mockSpeakingSessionService.endSession).toHaveBeenCalledWith(
         'disc-attempt',
+        'test-user',
       );
     });
 
@@ -123,6 +138,24 @@ describe('SpeakingGateway', () => {
       expect(() =>
         gateway.handleDisconnect(mockSocket as Socket),
       ).not.toThrow();
+    });
+  });
+
+  describe('authorization boundaries', () => {
+    it('should emit unauthorized error when request-upload-url attempt does not match joined attempt', async () => {
+      await gateway.handleJoin(
+        { attemptId: 'attempt-a', questionId: 'q1' },
+        mockSocket as Socket,
+      );
+
+      await gateway.handleRequestUploadUrl(
+        { attemptId: 'attempt-b' },
+        mockSocket as Socket,
+      );
+
+      expect(mockSocket.emit).toHaveBeenCalledWith('error', {
+        message: 'Unauthorized',
+      });
     });
   });
 });

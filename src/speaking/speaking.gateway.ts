@@ -24,6 +24,8 @@ import { SpeakingSessionService } from './speaking-session.service';
 export class SpeakingGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
+  private readonly MAX_AUDIO_BASE64_LENGTH = 1_000_000;
+
   @WebSocketServer()
   server: Server;
 
@@ -31,6 +33,36 @@ export class SpeakingGateway
   private clientToAttemptMap = new Map<string, string>();
 
   constructor(private speakingSessionService: SpeakingSessionService) {}
+
+  private getFirebaseUid(client: Socket): string {
+    const uid = (client as Socket & { user?: { uid?: string } }).user?.uid;
+    if (!uid) {
+      throw new Error('UNAUTHORIZED_SOCKET');
+    }
+    return uid;
+  }
+
+  private assertClientAttemptScope(client: Socket, attemptId: string): void {
+    const mappedAttemptId = this.clientToAttemptMap.get(client.id);
+    if (!mappedAttemptId || mappedAttemptId !== attemptId) {
+      throw new Error('ATTEMPT_SCOPE_MISMATCH');
+    }
+  }
+
+  private emitSocketError(client: Socket, error: Error): void {
+    if (
+      error.message === 'UNAUTHORIZED_SOCKET' ||
+      error.message === 'ATTEMPT_NOT_FOUND_OR_FORBIDDEN' ||
+      error.message === 'ATTEMPT_SCOPE_MISMATCH'
+    ) {
+      client.emit('error', { message: 'Unauthorized' });
+      return;
+    }
+
+    client.emit('error', {
+      message: 'Failed to process speaking request',
+    });
+  }
 
   afterInit(server: Server) {
     this.logger.log('Speaking Gateway Initialized');
@@ -40,7 +72,7 @@ export class SpeakingGateway
     this.logger.log(`Client connected: ${client.id}`);
   }
 
-  handleDisconnect(client: Socket) {
+  async handleDisconnect(client: Socket) {
     console.log(
       `[DISCONNECT] Client disconnected: ${client.id}, Reason: ${
         client.connected ? 'STILL CONNECTED' : 'CLOSED'
@@ -52,7 +84,14 @@ export class SpeakingGateway
       this.logger.log(
         `Cleaning up session for attempt: ${attemptId} after abrupt disconnect`,
       );
-      this.speakingSessionService.endSession(attemptId);
+      try {
+        const firebaseUid = this.getFirebaseUid(client);
+        await this.speakingSessionService.endSession(attemptId, firebaseUid);
+      } catch (err) {
+        this.logger.error(
+          `Failed to end session on disconnect for attempt ${attemptId}: ${err.message}`,
+        );
+      }
       this.clientToAttemptMap.delete(client.id);
     }
   }
@@ -66,23 +105,27 @@ export class SpeakingGateway
     this.logger.log(
       `Client ${client.id} joined attempt: ${data.attemptId} for question: ${data.questionId}`,
     );
-    client.join(data.attemptId);
-    this.clientToAttemptMap.set(client.id, data.attemptId);
 
     try {
+      const firebaseUid = this.getFirebaseUid(client);
+
       // Initialize Gemini Chat context and get opener
       const opener = await this.speakingSessionService.initializeSession(
         data.attemptId,
         data.questionId,
         data.questionContext,
+        firebaseUid,
       );
+
+      client.join(data.attemptId);
+      this.clientToAttemptMap.set(client.id, data.attemptId);
 
       client.emit('examiner-ready', {
         message: opener,
       });
     } catch (e) {
       this.logger.error(`Failed to initialize session: ${e.message}`);
-      client.emit('error', { message: 'Failed to start AI Examiner session.' });
+      this.emitSocketError(client, e);
     }
   }
 
@@ -92,6 +135,8 @@ export class SpeakingGateway
     @ConnectedSocket() client: Socket,
   ) {
     try {
+      this.assertClientAttemptScope(client, data.attemptId);
+
       this.logger.log(
         `Received audio chunk from ${client.id} for attempt ${data.attemptId}`,
       );
@@ -101,11 +146,17 @@ export class SpeakingGateway
           'Invalid data payload (missing audio buffer or attemptId)',
         );
       }
+      if (data.audio.length > this.MAX_AUDIO_BASE64_LENGTH) {
+        throw new Error('Audio payload too large');
+      }
+
+      const firebaseUid = this.getFirebaseUid(client);
 
       // STT -> LLM Pipeline Turn
       const reply = await this.speakingSessionService.processTurn(
         data.attemptId,
         data.audio,
+        firebaseUid,
       );
 
       client.emit('examiner-response', {
@@ -114,21 +165,27 @@ export class SpeakingGateway
       });
     } catch (err) {
       this.logger.error(`Error processing audio turn: ${err.message}`);
-      client.emit('error', {
-        message: 'Failed to process audio or generate LLM response',
-      });
+      this.emitSocketError(client, err);
     }
   }
 
   @SubscribeMessage('end-speaking-test')
-  handleEnd(
+  async handleEnd(
     @MessageBody() data: { attemptId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.logger.log(`Client ${client.id} ended attempt ${data.attemptId}`);
-    this.speakingSessionService.endSession(data.attemptId);
-    this.clientToAttemptMap.delete(client.id);
-    client.leave(data.attemptId);
+    try {
+      this.assertClientAttemptScope(client, data.attemptId);
+      const firebaseUid = this.getFirebaseUid(client);
+
+      this.logger.log(`Client ${client.id} ended attempt ${data.attemptId}`);
+      await this.speakingSessionService.endSession(data.attemptId, firebaseUid);
+      this.clientToAttemptMap.delete(client.id);
+      client.leave(data.attemptId);
+    } catch (err) {
+      this.logger.error(`Error ending speaking session: ${err.message}`);
+      this.emitSocketError(client, err);
+    }
   }
 
   @SubscribeMessage('request-upload-url')
@@ -137,16 +194,20 @@ export class SpeakingGateway
     @ConnectedSocket() client: Socket,
   ) {
     try {
+      this.assertClientAttemptScope(client, data.attemptId);
+      const firebaseUid = this.getFirebaseUid(client);
+
       this.logger.log(
         `Client ${client.id} requesting upload URL for attempt ${data.attemptId}`,
       );
       const uploadUrl = await this.speakingSessionService.createUploadUrl(
         data.attemptId,
+        firebaseUid,
       );
       client.emit('upload-url-ready', { uploadUrl });
     } catch (err) {
       this.logger.error(`Error generating upload URL: ${err.message}`);
-      client.emit('error', { message: 'Failed to generate upload URL' });
+      this.emitSocketError(client, err);
     }
   }
 }
