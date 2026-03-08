@@ -1,5 +1,6 @@
 import { AttemptStatus, GradingStatus, TransactionType } from '@prisma/client';
 import { PrismaAttemptsDatasource } from '../src/attempts/attempts.datasource';
+import { PrismaCreditsDatasource } from '../src/credits/credits.datasource';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 type SeedContext = {
@@ -31,6 +32,7 @@ describeIfDatabase(
   () => {
     let prismaService: PrismaService;
     let datasource: PrismaAttemptsDatasource;
+    let creditsDatasource: PrismaCreditsDatasource;
     let seedContext: SeedContext;
 
     const cleanup = async (context: SeedContext | null) => {
@@ -146,6 +148,7 @@ describeIfDatabase(
       prismaService = new PrismaService();
       await prismaService.onModuleInit();
       datasource = new PrismaAttemptsDatasource(prismaService);
+      creditsDatasource = new PrismaCreditsDatasource(prismaService);
     });
 
     beforeEach(async () => {
@@ -276,5 +279,233 @@ describeIfDatabase(
       expect(transactions).toHaveLength(0);
       expect(gradingRequests).toHaveLength(0);
     });
+
+    it('should prevent duplicate pending requests and double-spend under concurrent booking burst', async () => {
+      await prismaService.client.user.update({
+        where: { id: seedContext.student.id },
+        data: { creditBalance: seedContext.teacherProfile.creditRate },
+      });
+
+      const burstSize = 12;
+      const bookingPromises = Array.from({ length: burstSize }).map(() =>
+        datasource.createGradingRequestWithCreditTransfer(
+          seedContext.student.firebaseUid,
+          seedContext.attempt.id,
+          seedContext.teacherProfile.id,
+          'WRITING',
+        ),
+      );
+
+      const settled = await Promise.allSettled(bookingPromises);
+      const fulfilledCount = settled.filter(
+        (result) => result.status === 'fulfilled',
+      ).length;
+
+      expect(fulfilledCount).toBe(1);
+
+      const [studentAfter, teacherAfter, transactions, gradingRequests] =
+        await Promise.all([
+          prismaService.client.user.findUnique({
+            where: { id: seedContext.student.id },
+            select: { creditBalance: true },
+          }),
+          prismaService.client.user.findUnique({
+            where: { id: seedContext.teacher.id },
+            select: { creditBalance: true },
+          }),
+          prismaService.client.transaction.findMany({
+            where: {
+              userId: {
+                in: [seedContext.student.id, seedContext.teacher.id],
+              },
+            },
+            select: {
+              userId: true,
+              amount: true,
+              type: true,
+            },
+          }),
+          prismaService.client.gradingRequest.findMany({
+            where: {
+              attemptId: seedContext.attempt.id,
+              teacherId: seedContext.teacherProfile.id,
+              targetSectionType: 'WRITING',
+              status: GradingStatus.PENDING,
+            },
+          }),
+        ]);
+
+      expect(studentAfter?.creditBalance).toBe(0);
+      expect(teacherAfter?.creditBalance).toBe(
+        seedContext.teacher.creditBalance +
+          seedContext.teacherProfile.creditRate,
+      );
+      expect(gradingRequests).toHaveLength(1);
+      expect(transactions).toEqual(
+        expect.arrayContaining([
+          {
+            userId: seedContext.student.id,
+            amount: -seedContext.teacherProfile.creditRate,
+            type: TransactionType.SPEND,
+          },
+          {
+            userId: seedContext.teacher.id,
+            amount: seedContext.teacherProfile.creditRate,
+            type: TransactionType.EARN,
+          },
+        ]),
+      );
+      expect(
+        transactions.filter((tx) => tx.type === TransactionType.SPEND),
+      ).toHaveLength(1);
+      expect(
+        transactions.filter((tx) => tx.type === TransactionType.EARN),
+      ).toHaveLength(1);
+    }, 15000);
+
+    it('should keep credit/transaction invariants stable for concurrent top-up and booking burst', async () => {
+      await prismaService.client.user.update({
+        where: { id: seedContext.student.id },
+        data: { creditBalance: 5 },
+      });
+
+      const topUpAmount = seedContext.teacherProfile.creditRate;
+      const bookingBurstSize = 10;
+
+      const requests = [
+        creditsDatasource.topUpCreditsTransaction(
+          seedContext.student.id,
+          topUpAmount,
+          'Task 3.4b concurrent top-up',
+        ),
+        ...Array.from({ length: bookingBurstSize }).map(() =>
+          datasource.createGradingRequestWithCreditTransfer(
+            seedContext.student.firebaseUid,
+            seedContext.attempt.id,
+            seedContext.teacherProfile.id,
+            'WRITING',
+          ),
+        ),
+      ];
+
+      const settled = await Promise.allSettled(requests);
+      const bookingResults = settled.slice(1);
+      const bookingSuccessCount = bookingResults.filter(
+        (result) => result.status === 'fulfilled',
+      ).length;
+
+      expect(bookingSuccessCount).toBeLessThanOrEqual(1);
+
+      const [studentAfter, teacherAfter, transactions, gradingRequests] =
+        await Promise.all([
+          prismaService.client.user.findUnique({
+            where: { id: seedContext.student.id },
+            select: { creditBalance: true },
+          }),
+          prismaService.client.user.findUnique({
+            where: { id: seedContext.teacher.id },
+            select: { creditBalance: true },
+          }),
+          prismaService.client.transaction.findMany({
+            where: {
+              userId: {
+                in: [seedContext.student.id, seedContext.teacher.id],
+              },
+            },
+            select: {
+              userId: true,
+              amount: true,
+              type: true,
+              description: true,
+            },
+          }),
+          prismaService.client.gradingRequest.findMany({
+            where: {
+              attemptId: seedContext.attempt.id,
+              teacherId: seedContext.teacherProfile.id,
+              targetSectionType: 'WRITING',
+              status: GradingStatus.PENDING,
+            },
+          }),
+        ]);
+
+      expect(gradingRequests).toHaveLength(bookingSuccessCount);
+      expect(
+        transactions.filter(
+          (tx) =>
+            tx.userId === seedContext.student.id &&
+            tx.type === TransactionType.TOPUP &&
+            tx.amount === topUpAmount,
+        ),
+      ).toHaveLength(1);
+      expect(
+        transactions.filter((tx) => tx.type === TransactionType.SPEND),
+      ).toHaveLength(bookingSuccessCount);
+      expect(
+        transactions.filter((tx) => tx.type === TransactionType.EARN),
+      ).toHaveLength(bookingSuccessCount);
+
+      expect(studentAfter?.creditBalance).toBe(
+        5 +
+          topUpAmount -
+          bookingSuccessCount * seedContext.teacherProfile.creditRate,
+      );
+      expect(teacherAfter?.creditBalance).toBe(
+        seedContext.teacher.creditBalance +
+          bookingSuccessCount * seedContext.teacherProfile.creditRate,
+      );
+    }, 15000);
+
+    it('should allow re-book after completion while still preventing duplicate pending request', async () => {
+      const firstRequest =
+        await datasource.createGradingRequestWithCreditTransfer(
+          seedContext.student.firebaseUid,
+          seedContext.attempt.id,
+          seedContext.teacherProfile.id,
+          'WRITING',
+        );
+
+      await prismaService.client.gradingRequest.update({
+        where: { id: firstRequest.id },
+        data: { status: GradingStatus.COMPLETED },
+      });
+
+      const secondRequest =
+        await datasource.createGradingRequestWithCreditTransfer(
+          seedContext.student.firebaseUid,
+          seedContext.attempt.id,
+          seedContext.teacherProfile.id,
+          'WRITING',
+        );
+
+      await expect(
+        prismaService.client.gradingRequest.update({
+          where: { id: secondRequest.id },
+          data: { status: GradingStatus.COMPLETED },
+        }),
+      ).resolves.toBeTruthy();
+
+      const [completedRequests, pendingRequests] = await Promise.all([
+        prismaService.client.gradingRequest.count({
+          where: {
+            attemptId: seedContext.attempt.id,
+            teacherId: seedContext.teacherProfile.id,
+            targetSectionType: 'WRITING',
+            status: GradingStatus.COMPLETED,
+          },
+        }),
+        prismaService.client.gradingRequest.count({
+          where: {
+            attemptId: seedContext.attempt.id,
+            teacherId: seedContext.teacherProfile.id,
+            targetSectionType: 'WRITING',
+            status: GradingStatus.PENDING,
+          },
+        }),
+      ]);
+
+      expect(completedRequests).toBe(2);
+      expect(pendingRequests).toBe(0);
+    }, 15000);
   },
 );

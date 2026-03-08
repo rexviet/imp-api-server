@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   AttemptStatus,
   GradingStatus,
+  Prisma,
   TransactionType,
   User,
   UserAttempt,
@@ -214,86 +215,107 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
     teacherProfileId: string,
     targetSectionType: 'WRITING' | 'SPEAKING',
   ): Promise<any> {
-    return this.prisma.client.$transaction(async (tx) => {
-      const student = await tx.user.findUnique({
-        where: { firebaseUid },
-      });
-      if (!student) throw new Error('User not found in transaction');
+    try {
+      return await this.prisma.client.$transaction(async (tx) => {
+        const student = await tx.user.findUnique({
+          where: { firebaseUid },
+        });
+        if (!student) throw new Error('User not found in transaction');
 
-      const attempt = await tx.userAttempt.findFirst({
-        where: { id: attemptId, userId: student.id },
-        include: { test: { select: { title: true } } },
-      });
-      if (!attempt) throw new Error('ATTEMPT_NOT_FOUND_OR_FORBIDDEN');
-      if (attempt.status === AttemptStatus.IN_PROGRESS) {
-        throw new Error('ATTEMPT_NOT_COMPLETED');
-      }
+        const attempt = await tx.userAttempt.findFirst({
+          where: { id: attemptId, userId: student.id },
+          include: { test: { select: { title: true } } },
+        });
+        if (!attempt) throw new Error('ATTEMPT_NOT_FOUND_OR_FORBIDDEN');
+        if (attempt.status === AttemptStatus.IN_PROGRESS) {
+          throw new Error('ATTEMPT_NOT_COMPLETED');
+        }
 
-      const teacherProfile = await tx.teacherProfile.findUnique({
-        where: { id: teacherProfileId },
-        include: { user: { select: { id: true, name: true, email: true } } },
-      });
-      if (!teacherProfile) throw new Error('TEACHER_NOT_FOUND');
+        const teacherProfile = await tx.teacherProfile.findUnique({
+          where: { id: teacherProfileId },
+          include: { user: { select: { id: true, name: true, email: true } } },
+        });
+        if (!teacherProfile) throw new Error('TEACHER_NOT_FOUND');
 
-      const existingPendingRequest = await tx.gradingRequest.findFirst({
-        where: {
-          attemptId,
-          teacherId: teacherProfileId,
-          status: GradingStatus.PENDING,
-        },
-      });
-      if (existingPendingRequest) throw new Error('GRADING_REQUEST_EXISTS');
+        const existingPendingRequest = await tx.gradingRequest.findFirst({
+          where: {
+            attemptId,
+            teacherId: teacherProfileId,
+            targetSectionType,
+            status: GradingStatus.PENDING,
+          },
+        });
+        if (existingPendingRequest) throw new Error('GRADING_REQUEST_EXISTS');
 
-      const cost = teacherProfile.creditRate;
-      if (student.creditBalance < cost) {
-        throw new Error(
-          `INSUFFICIENT_CREDITS:${cost}:${student.creditBalance}`,
-        );
-      }
+        const cost = teacherProfile.creditRate;
 
-      await tx.user.update({
-        where: { id: student.id },
-        data: { creditBalance: { decrement: cost } },
-      });
-      await tx.transaction.create({
-        data: {
-          userId: student.id,
-          amount: -cost,
-          type: TransactionType.SPEND,
-          description: `Teacher review booking for "${attempt.test.title}"`,
-        },
-      });
+        const debitResult = await tx.user.updateMany({
+          where: {
+            id: student.id,
+            creditBalance: { gte: cost },
+          },
+          data: { creditBalance: { decrement: cost } },
+        });
 
-      await tx.user.update({
-        where: { id: teacherProfile.user.id },
-        data: { creditBalance: { increment: cost } },
-      });
-      await tx.transaction.create({
-        data: {
-          userId: teacherProfile.user.id,
-          amount: cost,
-          type: TransactionType.EARN,
-          description: `Review booking income for "${attempt.test.title}"`,
-        },
-      });
+        if (debitResult.count === 0) {
+          const latestStudent = await tx.user.findUnique({
+            where: { id: student.id },
+            select: { creditBalance: true },
+          });
 
-      return tx.gradingRequest.create({
-        data: {
-          attemptId,
-          teacherId: teacherProfileId,
-          targetSectionType,
-          status: GradingStatus.PENDING,
-        },
-        include: {
-          teacher: {
-            include: {
-              user: {
-                select: { id: true, name: true, email: true },
+          throw new Error(
+            `INSUFFICIENT_CREDITS:${cost}:${latestStudent?.creditBalance ?? 0}`,
+          );
+        }
+
+        await tx.transaction.create({
+          data: {
+            userId: student.id,
+            amount: -cost,
+            type: TransactionType.SPEND,
+            description: `Teacher review booking for "${attempt.test.title}"`,
+          },
+        });
+
+        await tx.user.update({
+          where: { id: teacherProfile.user.id },
+          data: { creditBalance: { increment: cost } },
+        });
+        await tx.transaction.create({
+          data: {
+            userId: teacherProfile.user.id,
+            amount: cost,
+            type: TransactionType.EARN,
+            description: `Review booking income for "${attempt.test.title}"`,
+          },
+        });
+
+        return tx.gradingRequest.create({
+          data: {
+            attemptId,
+            teacherId: teacherProfileId,
+            targetSectionType,
+            status: GradingStatus.PENDING,
+          },
+          include: {
+            teacher: {
+              include: {
+                user: {
+                  select: { id: true, name: true, email: true },
+                },
               },
             },
           },
-        },
+        });
       });
-    });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new Error('GRADING_REQUEST_EXISTS');
+      }
+      throw error;
+    }
   }
 }
