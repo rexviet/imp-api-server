@@ -200,7 +200,7 @@ describe('API Endpoints (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/users/register')
-        .send({ role: 'STUDENT' });
+        .send({ name: 'Test User' });
 
       expect(res.status).toBe(201);
       expect(res.body).toEqual(mockUser);
@@ -218,11 +218,48 @@ describe('API Endpoints (e2e)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/users/register')
-        .send({ role: 'STUDENT' });
+        .send({ name: 'Test User' });
 
       expect(res.status).toBe(201);
       expect(res.body).toEqual(existingUser);
       expect(mockUsersDatasource.create).not.toHaveBeenCalled();
+    });
+
+    it('POST /api/v1/users/register - should reject unsupported elevated role payload', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/users/register')
+        .send({ name: 'Attacker Name', role: 'ADMIN' });
+
+      expect(res.status).toBe(400);
+      expect(mockUsersDatasource.create).not.toHaveBeenCalled();
+    });
+
+    it('POST /api/v1/users/register - should allow teacher role payload', async () => {
+      mockUsersDatasource.findByFirebaseUid.mockResolvedValue(null);
+      const mockUser = {
+        id: 'teacher-user-1',
+        firebaseUid: 'test_uid_123',
+        email: 'e2e@test.com',
+        name: 'Teacher One',
+        role: 'TEACHER',
+      };
+      mockUsersDatasource.create.mockResolvedValue(mockUser);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/users/register')
+        .send({ name: 'Teacher One', role: 'TEACHER' });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual(mockUser);
+      expect(mockUsersDatasource.create).toHaveBeenCalledWith({
+        firebaseUid: 'test_uid_123',
+        email: 'e2e@test.com',
+        name: 'Teacher One',
+        role: 'TEACHER',
+      });
+      expect(mockUsersDatasource.createTeacherProfile).toHaveBeenCalledWith(
+        'teacher-user-1',
+      );
     });
 
     it('GET /api/v1/users/me - should return current user profile', async () => {
