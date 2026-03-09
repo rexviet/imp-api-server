@@ -68,19 +68,32 @@ export class PrismaAttemptsDatasource implements IAttemptsDatasource {
     return this.prisma.client.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
         where: { firebaseUid },
+        select: { id: true },
       });
       if (!user) throw new Error('User not found in transaction');
 
-      if (user.creditBalance < creditCost) {
-        throw new Error(
-          `INSUFFICIENT_CREDITS:${creditCost}:${user.creditBalance}`,
-        );
-      }
-
-      await tx.user.update({
-        where: { id: user.id },
+      const debitResult = await tx.user.updateMany({
+        where: {
+          id: user.id,
+          creditBalance: { gte: creditCost },
+        },
         data: { creditBalance: { decrement: creditCost } },
       });
+
+      if (debitResult.count === 0) {
+        const latestUser = await tx.user.findUnique({
+          where: { id: user.id },
+          select: { creditBalance: true },
+        });
+
+        if (!latestUser) {
+          throw new Error('User not found in transaction');
+        }
+
+        throw new Error(
+          `INSUFFICIENT_CREDITS:${creditCost}:${latestUser.creditBalance}`,
+        );
+      }
 
       await tx.transaction.create({
         data: {
