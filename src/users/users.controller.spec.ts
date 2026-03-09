@@ -4,7 +4,6 @@ import { UsersService } from './users.service';
 import { FirebaseAuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '@prisma/client';
-import { ExecutionContext } from '@nestjs/common';
 
 describe('UsersController', () => {
   let controller: UsersController;
@@ -18,7 +17,7 @@ describe('UsersController', () => {
   };
 
   const mockFirebaseAuthGuard = {
-    canActivate: (context: ExecutionContext) => true,
+    canActivate: () => true,
   };
 
   beforeEach(async () => {
@@ -30,7 +29,7 @@ describe('UsersController', () => {
       .overrideGuard(FirebaseAuthGuard)
       .useValue(mockFirebaseAuthGuard)
       .overrideGuard(RolesGuard)
-      .useValue({ canActivate: (_context: ExecutionContext) => true })
+      .useValue({ canActivate: () => true })
       .compile();
 
     controller = module.get<UsersController>(UsersController);
@@ -39,7 +38,7 @@ describe('UsersController', () => {
 
   it('should register a new user', async () => {
     const mockToken = { uid: 'uid1', email: 'test@test.com' };
-    const mockDto = { role: UserRole.STUDENT };
+    const mockDto = { name: 'Updated Name' };
     const expectedResult = { id: '1', firebaseUid: 'uid1' };
 
     mockUsersService.findOrCreateUser.mockResolvedValue(expectedResult);
@@ -49,8 +48,29 @@ describe('UsersController', () => {
     expect(service.findOrCreateUser).toHaveBeenCalledWith(
       'uid1',
       'test@test.com',
+      'Updated Name',
       undefined,
-      UserRole.STUDENT,
+    );
+  });
+
+  it('should allow teacher role from register payload', async () => {
+    const mockToken = {
+      uid: 'uid-teacher',
+      email: 'teacher@test.com',
+    };
+    const payload = { name: 'Teacher', role: UserRole.TEACHER };
+    const expectedResult = { id: '2', firebaseUid: 'uid-teacher' };
+
+    mockUsersService.findOrCreateUser.mockResolvedValue(expectedResult);
+
+    const result = await controller.register(mockToken, payload as any);
+
+    expect(result).toEqual(expectedResult);
+    expect(service.findOrCreateUser).toHaveBeenCalledWith(
+      'uid-teacher',
+      'teacher@test.com',
+      'Teacher',
+      UserRole.TEACHER,
     );
   });
 
